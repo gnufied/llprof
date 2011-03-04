@@ -5,19 +5,23 @@ using namespace std;
 #include <pthread.h>
 #include "class_table.h"
 
-st_table *gClassTbl;
+NameTable gMethodTbl, gClassTbl;
 
-pthread_mutex_t gClassTblMutex;
+NameTable *GetMethodNameTable()
+{
+    return &gMethodTbl;
+}
+NameTable *GetClassNameTable()
+{
+    return &gClassTbl;
+}
 
-typedef unsigned long long int class_key_t;
-
-
-int clstbl_cmp(class_key_t a, class_key_t b) 
+int clstbl_cmp(NameTable::Key a, NameTable::Key b) 
 {
     return (a != b);
 }
 
-int clstbl_hash(class_key_t key)
+int clstbl_hash(NameTable::Key key)
 {
     int hval = *reinterpret_cast<int *>(&key);
     return hval;
@@ -28,54 +32,54 @@ struct st_hash_type clstbl_hash_type = {
     (st_index_t (*)(...)) clstbl_hash
 };
 
-
-void InitClassTbl()
+__thread const char *nullstr = "(null)";
+const char *new_str(const char *str)
 {
-    pthread_mutex_init(&gClassTblMutex, NULL);
-	gClassTbl = st_init_table(&clstbl_hash_type);
-}
-
-char *new_str(const char *str)
-{
+    if(!str)
+        return nullstr;
     char *new_buf = (char *)malloc(strlen(str)+1);
     strcpy(new_buf, str);
     return new_buf;
 }
 
-const char *AddClassName(VALUE klass)
+NameTable::NameTable()
 {
-    class_key_t entry = (class_key_t)klass;
+    pthread_mutex_init(&mtx_, NULL);
+    table_ = st_init_table(&clstbl_hash_type);
+}
+
+
+// value: rb_class2name(klass)
+void NameTable::AddCB(Key key, const char * cb(Key key))
+{
     char *name;
-    pthread_mutex_lock(&gClassTblMutex);
-	if(!st_lookup(gClassTbl, (st_data_t)entry, (st_data_t *)&name))
+    pthread_mutex_lock(&mtx_);
+	if(!st_lookup(table_, (st_data_t)key, (st_data_t *)&name))
 	{
-        char *ns = new_str(rb_class2name(klass));
+        const char *ns = new_str(cb(key));
         // printf("Add Class : %s\n", ns);
 		st_insert(
-            gClassTbl,
-            (st_data_t)entry,
+            table_,
+            (st_data_t)key,
             (st_data_t)ns
         );
-        pthread_mutex_unlock(&gClassTblMutex);
-        return ns;
+        pthread_mutex_unlock(&mtx_);
 	}
-    pthread_mutex_unlock(&gClassTblMutex);
-    return name;
+    pthread_mutex_unlock(&mtx_);
 }
 
 __thread const char *null_str = "(ERR)";
-const char * GetClassName(VALUE klass)
+const char * NameTable::Get(Key entry)
 {
-    class_key_t entry = (class_key_t)klass;
     char *name;
-    pthread_mutex_lock(&gClassTblMutex);
-	if(!st_lookup(gClassTbl, (st_data_t)entry, (st_data_t *)&name))
+    pthread_mutex_lock(&mtx_);
+	if(!st_lookup(table_, (st_data_t)entry, (st_data_t *)&name))
 	{
-        pthread_mutex_unlock(&gClassTblMutex);
+        pthread_mutex_unlock(&mtx_);
         return null_str;
         //return NULL;
 	}
-    pthread_mutex_unlock(&gClassTblMutex);
+    pthread_mutex_unlock(&mtx_);
     return name;
 }
 

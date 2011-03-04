@@ -2,10 +2,28 @@
 #define RRPROF_CLASSTBL_H
 
 #include <ruby/ruby.h>
+#include <pthread.h>
 
-void InitClassTbl();
-const char * AddClassName(VALUE klass);
 
-const char * GetClassName(VALUE klass);
+class NameTable
+{
+public:
+    typedef unsigned long long Key;
+
+private:
+    pthread_mutex_t mtx_;
+    struct st_table *table_;
+    
+public:
+    NameTable();
+
+    void AddCB(Key key, const char * cb(Key key));
+    const char *Get(Key key);
+
+};
+
+NameTable *GetMethodNameTable();
+NameTable *GetClassNameTable();
+
 
 #endif

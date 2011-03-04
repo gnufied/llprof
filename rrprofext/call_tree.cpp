@@ -122,9 +122,7 @@ struct ThreadInfo
 
     vector<StackInfo> *SerializedStackArray;
 
-    // unsigned int ActualCallNodeSeq;
     unsigned int CurrentCallNodeID;
-    // unsigned int CallNodeSeq;
     unsigned int GenerationNumber;
 
     pthread_mutex_t DataMutex;
@@ -147,6 +145,9 @@ struct ThreadInfo
         
         SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
         SerializedStackArray = new vector<StackInfo>();
+
+        cout << "[NewThread]"  << endl << "  pNodes = " << SerializedNodeInfoArray << endl;
+        cout << "  pStack = " << SerializedStackArray << endl;
 
         NodeInfoArray.reserve(gDefaultNodeInfoTableSize);
         SerializedNodeInfoArray->reserve(gDefaultSerializedNodeInfoTableSize);
@@ -371,6 +372,15 @@ static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id)
 }
 
 
+const char *GetRbClassName(NameTable::Key key)
+{
+    return rb_class2name((VALUE)key);
+}
+
+const char *GetRbMethodName(NameTable::Key key)
+{
+    return rb_id2name((ID)key);
+}
 
 unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, ID mid, VALUE klass)
 {
@@ -380,7 +390,10 @@ unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, ID mid, VALUE 
     call_node->mid = mid;
     call_node->klass = klass;
     call_node->children = MethodTableCreate();
-    AddClassName(klass);
+    
+    GetClassNameTable()->AddCB(klass, GetRbClassName);
+    GetMethodNameTable()->AddCB(mid, GetRbMethodName);
+    
     call_node->parent_node_id = parent_node_id;
     call_node->st_table_key = MethodKeyCreate(call_node);
     if(parent_node_id != 0)
@@ -578,7 +591,9 @@ void CallTree_Init()
     gBackBuffer_SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
     gBackBuffer_SerializedStackArray = new vector<StackInfo>();
 
-    InitClassTbl();
+    cout << "[Init]"  << endl << "  pNodes = " << gBackBuffer_SerializedNodeInfoArray << endl;
+    cout << "  pStack = " << gBackBuffer_SerializedStackArray << endl;
+
     get_current_thread();
    
 
@@ -628,46 +643,36 @@ int BufferIteration_NextBuffer(ThreadIterator *iter)
 
 void CallTree_GetSerializedBuffer(ThreadInfo *thread, void **buf, unsigned int *size)
 {
-    vector<MethodNodeSerializedInfo> *tmp;
     pthread_mutex_lock(&thread->DataMutex);
 
-	// *size = sizeof(MethodNodeSerializedInfo) * thread->ActualCallNodeSeq;
-    *size = thread->SerializedNodeInfoArray->size() * sizeof(MethodNodeSerializedInfo);
-    
-    tmp = thread->SerializedNodeInfoArray;
-    thread->SerializedNodeInfoArray = gBackBuffer_SerializedNodeInfoArray;
+    swap(thread->SerializedNodeInfoArray, gBackBuffer_SerializedNodeInfoArray);
     thread->GenerationNumber++;
     thread->SerializedNodeInfoArray->resize(0);
 
-    gBackBuffer_SerializedNodeInfoArray = tmp;
-	*buf = &gBackBuffer_SerializedNodeInfoArray[0];
+	*buf = &(*gBackBuffer_SerializedNodeInfoArray)[0];
+    *size = gBackBuffer_SerializedNodeInfoArray->size() * sizeof(MethodNodeSerializedInfo);
     
     pthread_mutex_unlock(&thread->DataMutex);
 }
 
-void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned int *size)
-{    
-    vector<StackInfo> *tmp;
-    if(gBackBuffer_SerializedStackArray)
-    {
-        memset(&(*gBackBuffer_SerializedStackArray)[0], 0, sizeof(StackInfo) * gBackBuffer_SerializedStackArray->size());
-    }
 
-    int orig_sz = thread->SerializedStackArray->size();
+void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned int *size)
+{
     pthread_mutex_lock(&thread->StackMutex);
-    tmp = thread->SerializedStackArray;
-    thread->SerializedStackArray = gBackBuffer_SerializedStackArray;
-    gBackBuffer_SerializedStackArray = tmp;
+    int orig_sz = thread->SerializedStackArray->size();
+    swap(thread->SerializedStackArray, gBackBuffer_SerializedStackArray);
 
  	*size = sizeof(StackInfo) * gBackBuffer_SerializedStackArray->size();
-	*buf = &gBackBuffer_SerializedStackArray[0];
-    
-    pthread_mutex_unlock(&thread->StackMutex);
-    
+	*buf = &(*gBackBuffer_SerializedStackArray)[0];
+
+    thread->SerializedStackArray->resize(orig_sz);    
     // protocol: 0番目レコードには現在の時刻情報をいれる
     (*gBackBuffer_SerializedStackArray)[0].start_time = NOW_TIME;
     
-    thread->SerializedStackArray->resize(orig_sz);
+
+    memset(&(*thread->SerializedStackArray)[0], 0, sizeof(StackInfo) * thread->SerializedStackArray->size());
+    pthread_mutex_unlock(&thread->StackMutex);
+
 }
 
 void BufferIteration_GetBuffer(ThreadIterator *iter, void **buf, unsigned int *size)

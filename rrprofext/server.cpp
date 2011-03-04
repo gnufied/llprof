@@ -181,10 +181,10 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
             }
             const char *name = 0;
             if(subsec_type == QUERY_NAMES_SYMBOL)
-                name = rb_id2name(*(ID *)(msgbuf+(8*i)));
+                name = GetMethodNameTable()->Get(*(NameTable::Key *)(msgbuf+(8*i)));
             else if(subsec_type == QUERY_NAMES_CLASS)
             {
-                name = GetClassName(*(VALUE *)(msgbuf+(8*i)));
+                name = GetClassNameTable()->Get(*(NameTable::Key *)(msgbuf+(8*i)));
 
                 // cout << "   Res:" << name << endl;
             }
