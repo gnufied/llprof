@@ -26,7 +26,7 @@ struct method_table_t
 };
 
 
-typedef struct _tag_method_node_info
+struct method_node_info_t
 {
     unsigned int serialized_node_index;
     unsigned int generation_number;
@@ -40,10 +40,10 @@ typedef struct _tag_method_node_info
 	method_table_t *children;
     time_val_t start_time;
 	unsigned int parent_node_id;
-} method_node_info_t;
+};
 
 #pragma pack(4)
-typedef struct _tag_method_serialized_node_info
+struct method_serialized_node_info_t
 {
 	ID mid;
 	VALUE klass;
@@ -55,16 +55,16 @@ typedef struct _tag_method_serialized_node_info
 	time_val_t children_time;
 	unsigned long long int call_count;
 
-} method_serialized_node_info_t;
+};
 #pragma pack()
 
 
 #pragma pack(4)
-typedef struct _tag_serialized_stack_info
+struct serialized_stack_info_t
 {
     int node_id;
     time_val_t start_time;
-} serialized_stack_info_t;
+};
 #pragma pack()
 
 
@@ -102,7 +102,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
 }
 
 
-typedef struct _tag_thread_info {
+struct thread_info_t {
     unsigned long long int ThreadID;
 
     method_node_info_t *NodeInfoTable;
@@ -132,9 +132,9 @@ typedef struct _tag_thread_info {
 
     int stop;
     
-    struct _tag_thread_info *next;
+    thread_info_t *next;
 
-} thread_info_t;
+};
 
 
 void thread_info_alloc_node_table(thread_info_t *info, int size);
@@ -487,30 +487,8 @@ static method_node_info_t *GetNodeInfo(unsigned int call_node_id)
     return call_node;
 }
 
-
-//----------------------------------------------------------------------
-__thread unsigned long long gTLSDepth = 0;
-
-#ifdef DO_NOTHING_IN_HOOK
-
 void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
 {
-    gTLSDepth++;
-    printf("Cal D=%lld\n", gTLSDepth);
-    return;
-}
-
-void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
-{
-    gTLSDepth--;
-    printf("Ret D=%lld\n", gTLSDepth);    
-    return;
-}
-
-#else // DO_NOTHING_IN_HOOK
-void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
-{
-
     thread_info_t* ti = CURRENT_THREAD;
 
 	if(ti->stop)
@@ -521,46 +499,31 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     
 	ID id;
 	VALUE klass;
-    #ifdef ENABLE_RUBY_RUNTIME_INFO
-        rb_frame_method_id_and_class(&id, &klass);
-    #else
-        id = 0;
-        klass = 0;
-	#endif
 
-    #ifdef ENABLE_SEARCH_NODES
-        unsigned int before = ti->CurrentCallNodeID;
-        ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, id, klass);
-        
-        method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-        method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
-    #else
-        method_serialized_node_info_t sinfo_buf;
-        method_serialized_node_info_t *sinfo = &sinfo_buf;
-        method_node_info_t ninfo_buf;
-        method_node_info_t *ninfo = &ninfo_buf;
-    #endif
+    rb_frame_method_id_and_class(&id, &klass);
 
-    #ifdef ENABLE_CALC_TIMES
-        sinfo->call_count++;
-        ninfo->start_time = NOW_TIME;
-    #endif
+    unsigned int before = ti->CurrentCallNodeID;
+    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, id, klass);
+    
+    method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
 
-    #ifdef ENABLE_STACK
-        pthread_mutex_lock(&ti->StackMutex);
-        if(ti->SerializedStackInfo_Size <= ti->StackSize) {
-            ti->SerializedStackInfo = (serialized_stack_info_t *)realloc(
-                    ti->SerializedStackInfo,
-                    sizeof(serialized_stack_info_t) * ti->SerializedStackInfo_Size * 2
-                    );
-            ti->SerializedStackInfo_Size = ti->SerializedStackInfo_Size * 2;
-        }
-        serialized_stack_info_t *stack_info = ti->SerializedStackInfo + ti->StackSize;
-        ti->StackSize++;
-        stack_info->start_time = ninfo->start_time;
-        stack_info->node_id = ti->CurrentCallNodeID;
-        pthread_mutex_unlock(&ti->StackMutex);
-    #endif
+    sinfo->call_count++;
+    ninfo->start_time = NOW_TIME;
+
+    pthread_mutex_lock(&ti->StackMutex);
+    if(ti->SerializedStackInfo_Size <= ti->StackSize) {
+        ti->SerializedStackInfo = (serialized_stack_info_t *)realloc(
+                ti->SerializedStackInfo,
+                sizeof(serialized_stack_info_t) * ti->SerializedStackInfo_Size * 2
+                );
+        ti->SerializedStackInfo_Size = ti->SerializedStackInfo_Size * 2;
+    }
+    serialized_stack_info_t *stack_info = ti->SerializedStackInfo + ti->StackSize;
+    ti->StackSize++;
+    stack_info->start_time = ninfo->start_time;
+    stack_info->node_id = ti->CurrentCallNodeID;
+    pthread_mutex_unlock(&ti->StackMutex);
 
 	ti->stop = 0;	
 }
@@ -573,12 +536,11 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
     thread_info_t* ti = CURRENT_THREAD;
     // Rubyのバグ？
     // require終了時にも呼ばれる(バージョンがある)ようなのでスキップ
-    #ifdef ENABLE_SEARCH_NODES
-        if(ti->CurrentCallNodeID == 1)
-        {
-            return;
-        }
-    #endif
+
+    if(ti->CurrentCallNodeID == 1)
+    {
+        return;
+    }
     
 	if(ti->stop) return;
 	ti->stop = 1;
@@ -586,48 +548,25 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 	ID id;
 	VALUE klass;
 
-    #ifdef ENABLE_RUBY_RUNTIME_INFO
-        rb_frame_method_id_and_class( &id, &klass);
-    #else
-        id = 0;
-        klass = 0;
-    #endif
-
-    #ifdef ENABLE_SEARCH_NODES
-        method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-        method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
-        method_serialized_node_info_t *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
-    #else
-        method_serialized_node_info_t sinfo_buf;
-        method_serialized_node_info_t *sinfo = &sinfo_buf;
-        method_serialized_node_info_t parent_sinfo_buf;
-        method_serialized_node_info_t *parent_sinfo = &parent_sinfo_buf;
-        method_node_info_t ninfo_buf;
-        method_node_info_t *ninfo = &ninfo_buf;
-    #endif
+    rb_frame_method_id_and_class( &id, &klass);
+    method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+    method_serialized_node_info_t *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
     
-    #ifdef ENABLE_CALC_TIMES
-        time_val_t diff = NOW_TIME - ninfo->start_time;
-        //time_val_t diff = 0;
-        sinfo->all_time += diff;
-        //sinfo->children_time += ninfo->children_time;
-        ti->CurrentCallNodeID = sinfo->parent_node_id;
-        #ifdef ENABLE_SEARCH_NODES
-            assert(ti->CurrentCallNodeID != 0);
-        #endif
-        parent_sinfo->children_time += diff;
-    #endif
+    time_val_t diff = NOW_TIME - ninfo->start_time;
+    //time_val_t diff = 0;
+    sinfo->all_time += diff;
+    //sinfo->children_time += ninfo->children_time;
+    ti->CurrentCallNodeID = sinfo->parent_node_id;
+    assert(ti->CurrentCallNodeID != 0);
+    parent_sinfo->children_time += diff;
 
-    #ifdef ENABLE_STACK
-        pthread_mutex_lock(&ti->StackMutex);
-        ti->StackSize--;
-        pthread_mutex_unlock(&ti->StackMutex);
-    #endif
+    pthread_mutex_lock(&ti->StackMutex);
+    ti->StackSize--;
+    pthread_mutex_unlock(&ti->StackMutex);
 
 	ti->stop = 0;	
 }
-
-#endif // DO_NOTHING_IN_HOOK
 
 
 void CallTree_RegisterModeFunction()
