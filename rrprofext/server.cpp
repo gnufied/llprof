@@ -184,8 +184,9 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
                 name = rb_id2name(*(ID *)(msgbuf+(8*i)));
             else if(subsec_type == QUERY_NAMES_CLASS)
             {
-                cout << "Asking name: " << *(VALUE *)(msgbuf+(8*i)) << endl;
                 name = GetClassName(*(VALUE *)(msgbuf+(8*i)));
+
+                // cout << "   Res:" << name << endl;
             }
                 //name = rb_class2name(*(VALUE *)(msgbuf+(8*i)));
 //            printf("%d, %d: %lld => %s\n", subsec_type, i, *(unsigned long long *)(msgbuf+(8*i)), name);

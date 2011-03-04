@@ -1,4 +1,7 @@
 
+#include <iostream>
+using namespace std;
+
 #include <pthread.h>
 #include "class_table.h"
 
@@ -9,14 +12,15 @@ pthread_mutex_t gClassTblMutex;
 typedef unsigned long long int class_key_t;
 
 
-int clstbl_cmp(class_key_t *a, class_key_t *b) 
+int clstbl_cmp(class_key_t a, class_key_t b) 
 {
-    return (*a != *b);
+    return (a != b);
 }
 
-int clstbl_hash(class_key_t *key)
+int clstbl_hash(class_key_t key)
 {
-    return *reinterpret_cast<int *>(&key);
+    int hval = *reinterpret_cast<int *>(&key);
+    return hval;
 }
 
 struct st_hash_type clstbl_hash_type = {
@@ -43,7 +47,7 @@ const char *AddClassName(VALUE klass)
     class_key_t entry = (class_key_t)klass;
     char *name;
     pthread_mutex_lock(&gClassTblMutex);
-	if(!st_lookup(gClassTbl, (st_data_t)&entry, (st_data_t *)&name))
+	if(!st_lookup(gClassTbl, (st_data_t)entry, (st_data_t *)&name))
 	{
         char *ns = new_str(rb_class2name(klass));
         // printf("Add Class : %s\n", ns);
@@ -65,11 +69,11 @@ const char * GetClassName(VALUE klass)
     class_key_t entry = (class_key_t)klass;
     char *name;
     pthread_mutex_lock(&gClassTblMutex);
-	if(!st_lookup(gClassTbl, (st_data_t)&entry, (st_data_t *)&name))
+	if(!st_lookup(gClassTbl, (st_data_t)entry, (st_data_t *)&name))
 	{
         pthread_mutex_unlock(&gClassTblMutex);
-        // return null_str;
-        return NULL;
+        return null_str;
+        //return NULL;
 	}
     pthread_mutex_unlock(&gClassTblMutex);
     return name;
