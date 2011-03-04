@@ -1,5 +1,6 @@
 
-#include "classtbl.h"
+#include <pthread.h>
+#include "class_table.h"
 
 st_table *gClassTbl;
 
@@ -15,12 +16,12 @@ int clstbl_cmp(class_key_t *a, class_key_t *b)
 
 int clstbl_hash(class_key_t *key)
 {
-   return (int)key;
+    return *reinterpret_cast<int *>(&key);
 }
 
 struct st_hash_type clstbl_hash_type = {
-    (int (*)()) clstbl_cmp,
-    (int (*)()) clstbl_hash
+    (int (*)(...))clstbl_cmp,
+    (st_index_t (*)(...)) clstbl_hash
 };
 
 
@@ -32,7 +33,7 @@ void InitClassTbl()
 
 char *new_str(const char *str)
 {
-    char *new_buf = malloc(strlen(str)+1);
+    char *new_buf = (char *)malloc(strlen(str)+1);
     strcpy(new_buf, str);
     return new_buf;
 }

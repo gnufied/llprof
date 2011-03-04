@@ -3,8 +3,6 @@
 
 #include <ruby/ruby.h>
 
-st_table *tbl;
-
 void InitClassTbl();
 const char * AddClassName(VALUE klass);
 

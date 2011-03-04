@@ -1,4 +1,5 @@
 
+#include <iostream>
 #include <ruby/ruby.h>
 #include "server.h"
 #include "rrprof_const.h"
@@ -18,6 +19,10 @@
 
 #include "rrprof.h"
 #include "call_tree.h"
+#include "class_table.h"
+
+using namespace std;
+
 
 pthread_t gServerThread;
 
@@ -71,9 +76,9 @@ void SendMessage2(int sock, int msg_id, void *buf1, int buf_sz1, void *buf2, int
     unsigned int msg[] = {msg_id, buf_sz1+buf_sz2};
     write_full(sock, (char *)msg, 8);
     if(buf_sz1 != 0)
-        write_full(sock, buf1, buf_sz1);
+        write_full(sock, (char *)buf1, buf_sz1);
     if(buf_sz2 != 0)
-        write_full(sock, buf2, buf_sz2);
+        write_full(sock, (char *)buf2, buf_sz2);
 }
 
 
@@ -132,7 +137,7 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
         break;
     }
     case MSG_REQ_PROFILE_DATA:{
-        int sz;
+        unsigned int sz;
         char *buf;
         // printf("Now Time: %lld\n", GetNowTime());
         
@@ -178,7 +183,10 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
             if(subsec_type == QUERY_NAMES_SYMBOL)
                 name = rb_id2name(*(ID *)(msgbuf+(8*i)));
             else if(subsec_type == QUERY_NAMES_CLASS)
+            {
+                cout << "Asking name: " << *(VALUE *)(msgbuf+(8*i)) << endl;
                 name = GetClassName(*(VALUE *)(msgbuf+(8*i)));
+            }
                 //name = rb_class2name(*(VALUE *)(msgbuf+(8*i)));
 //            printf("%d, %d: %lld => %s\n", subsec_type, i, *(unsigned long long *)(msgbuf+(8*i)), name);
             if(name != 0)
@@ -250,7 +258,7 @@ void *rrprof_server_thread(void *p)
         #ifdef PRINT_DEBUG
 		printf("listening...\n");
         #endif
-		int sock = accept(listening_sock,  (struct sockaddr *)&client_addr, &len);
+		int sock = accept(listening_sock,  (struct sockaddr *)&client_addr, (socklen_t *)&len);
         #ifdef PRINT_DEBUG
 		printf("Connected\n");
         #endif

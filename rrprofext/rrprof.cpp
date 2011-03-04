@@ -142,6 +142,7 @@ void start_timer_thread()
 }
 #endif
 
+extern "C"
 void Init_rrprof(void)
 {
     gProgramStartedFlag = 0;
@@ -175,7 +176,7 @@ void Init_rrprof(void)
     #endif
 
 	VALUE rrprof_mod = rb_define_module("RRProf");
-    rb_define_module_function(rrprof_mod, "print_stat", print_stat, 0);
+    rb_define_module_function(rrprof_mod, "print_stat", (VALUE (*)(...))print_stat, 0);
 
 
     CallTree_Init();

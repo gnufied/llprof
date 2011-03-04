@@ -4,6 +4,7 @@
 #include <unistd.h>
 #include <errno.h>
 
+#include <iostream>
 
 #include <pthread.h>
 #include <sys/types.h>
@@ -15,11 +16,14 @@
 
 #include "rrprof.h"
 #include "call_tree.h"
+#include "class_table.h"
 
-typedef struct _tag_method_table
+using namespace std;
+
+struct method_table_t
 {
 	st_table *tbl;
-} method_table_t;
+};
 
 
 typedef struct _tag_method_node_info
@@ -169,7 +173,7 @@ thread_info_t* thread_info_new(unsigned long long thread_id)
     // info->SerializedNodeInfoTable = malloc(sizeof(method_serialized_node_info_t) * gDefaultSerializedNodeInfoTableSize);
     // info->SerializedNodeInfoTable_Size = gDefaultSerializedNodeInfoTableSize;
 
-    info->SerializedStackInfo = malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
+    info->SerializedStackInfo = (serialized_stack_info_t *)malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
     info->SerializedStackInfo_Size = gDefaultSerializedStackInfoSize;
 
     info->StackSize = 1;
@@ -193,7 +197,7 @@ thread_info_t* thread_info_new(unsigned long long thread_id)
 void thread_info_alloc_node_table(thread_info_t *info, int size)
 {
     pthread_mutex_lock(&info->GlobalMutex);
-	info->NodeInfoTable = realloc(info->NodeInfoTable, sizeof(method_node_info_t) * size);
+	info->NodeInfoTable = (method_node_info_t *)realloc(info->NodeInfoTable, sizeof(method_node_info_t) * size);
 	if(info->NodeInfoTable)
         info->NodeInfoTable_Size = size;
     else
@@ -210,7 +214,7 @@ void thread_info_alloc_node_table(thread_info_t *info, int size)
 void thread_info_alloc_serialized_node_table(thread_info_t *info, int size)
 {
     pthread_mutex_lock(&info->GlobalMutex);
-	info->SerializedNodeInfoTable = realloc(
+	info->SerializedNodeInfoTable = (method_serialized_node_info_t *)realloc(
         info->SerializedNodeInfoTable, sizeof(method_serialized_node_info_t) * size);
 	if(info->SerializedNodeInfoTable)
         info->SerializedNodeInfoTable_Size = size;
@@ -265,19 +269,19 @@ int gBackBuffer_SerializedStackInfo_Size;
 
 void alloc_back_buffer()
 {
-    gBackBuffer_SerializedNodeInfoTable = malloc(sizeof(method_serialized_node_info_t) * gDefaultSerializedNodeInfoTableSize);
+    gBackBuffer_SerializedNodeInfoTable = (method_serialized_node_info_t *)malloc(sizeof(method_serialized_node_info_t) * gDefaultSerializedNodeInfoTableSize);
     gBackBuffer_SerializedNodeInfoTable_Size = gDefaultSerializedNodeInfoTableSize;
 
-    gBackBuffer_SerializedStackInfo = malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
+    gBackBuffer_SerializedStackInfo = (serialized_stack_info_t *)malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
     gBackBuffer_SerializedStackInfo_Size = gDefaultSerializedStackInfoSize;
 }
 
 
-typedef struct _tag_method_node_key_t{
+struct method_node_key_t{
     ID mid;
     VALUE klass;
     int hashval;
-} method_node_key_t;
+};
 
 int mtbl_hash_type_cmp(method_node_key_t *a, method_node_key_t *b) 
 {
@@ -290,8 +294,8 @@ int mtbl_hash_type_hash(method_node_key_t *key)
 }
 
 struct st_hash_type mtbl_hash_type = {
-    (int (*)()) mtbl_hash_type_cmp,
-    (int (*)()) mtbl_hash_type_hash
+    (int (*)(...)) mtbl_hash_type_cmp,
+    (st_index_t (*)(...)) mtbl_hash_type_hash
 };
 
 
@@ -321,7 +325,10 @@ unsigned int MethodTableLookup(method_table_t *mtbl, VALUE klass, ID mid)
 	{
 		return 0;
 	}
-    return (unsigned int)ret;
+    return 
+        static_cast<unsigned int>(
+            reinterpret_cast<unsigned long long int>(ret)
+        );
 
 }
 
@@ -542,7 +549,7 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     #ifdef ENABLE_STACK
         pthread_mutex_lock(&ti->StackMutex);
         if(ti->SerializedStackInfo_Size <= ti->StackSize) {
-            ti->SerializedStackInfo = realloc(
+            ti->SerializedStackInfo = (serialized_stack_info_t *)realloc(
                     ti->SerializedStackInfo,
                     sizeof(serialized_stack_info_t) * ti->SerializedStackInfo_Size * 2
                     );
@@ -657,11 +664,11 @@ void print_tree(unsigned int id, int indent)
 	{
 		printf(" ");
 	}
-	printf("%s(%d)\n", info->mid_str, sinfo->call_count);
+	cout << info->mid_str << "(" << sinfo->call_count << ")"<< endl;
 	
 	print_tree_prm_t prm;
 	prm.indent = indent + 2;
-	st_foreach(info->children->tbl, print_tree_st, (st_data_t)&prm);
+	st_foreach(info->children->tbl, (int (*)(...))print_tree_st, (st_data_t)&prm);
 
 }
 
