@@ -141,7 +141,7 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
         char *buf;
         // printf("Now Time: %lld\n", GetNowTime());
         
-        thread_iterator iter;
+        ThreadIterator iter;
         BufferIteration_Initialize(&iter);
         while(BufferIteration_NextBuffer(&iter))
         {
@@ -271,7 +271,6 @@ void *rrprof_server_thread(void *p)
 				break;
 			int msg_id = msg[0];
 			int msg_sz = msg[1];
-			// printf("Message Recv: %d, %d\n" , msg_id, msg_sz);
             if(msg_sz >= sizeof(msg_buf))
             {
                 printf("\nReceive: Message too large\n");

@@ -20,13 +20,22 @@
 
 using namespace std;
 
-struct method_table_t
+
+//int gDefaultNodeInfoTableSize = 65536;
+//int gDefaultSerializedNodeInfoTableSize = 65536;
+int gDefaultNodeInfoTableSize = 16;
+int gDefaultSerializedNodeInfoTableSize = 16;
+int gDefaultSerializedStackInfoSize = 512;
+
+
+
+struct MethodTable
 {
 	st_table *tbl;
 };
 
 
-struct method_node_info_t
+struct MethodNodeInfo
 {
     unsigned int serialized_node_index;
     unsigned int generation_number;
@@ -36,19 +45,17 @@ struct method_node_info_t
 	const char *mid_str;
 	const char *klass_str;
 
-    struct method_node_key_t *st_table_key;
-	method_table_t *children;
+    struct CallTreeNodeKey *st_table_key;
+	MethodTable *children;
     time_val_t start_time;
 	unsigned int parent_node_id;
 };
 
 #pragma pack(4)
-struct method_serialized_node_info_t
+struct MethodNodeSerializedInfo
 {
 	ID mid;
 	VALUE klass;
-    //unsigned int call_node_id;
-	//unsigned int parent_node_id;
     unsigned int call_node_id;
 	unsigned int parent_node_id;
 	time_val_t all_time;
@@ -60,7 +67,7 @@ struct method_serialized_node_info_t
 
 
 #pragma pack(4)
-struct serialized_stack_info_t
+struct StackInfo
 {
     int node_id;
     time_val_t start_time;
@@ -74,7 +81,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
     static slide_record_t slides[16];
     int slide_idx = 0;
     {
-        method_serialized_node_info_t test;
+        MethodNodeSerializedInfo test;
         
         ADD_SLIDE(mid, "pdata.mid")
         ADD_SLIDE(klass, "pdata.class")
@@ -88,7 +95,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
         slide_idx++;
     }
     {
-        serialized_stack_info_t test;
+        StackInfo test;
         
         ADD_SLIDE(node_id, "sdata.node_id")
         ADD_SLIDE(start_time, "sdata.start_time")
@@ -102,20 +109,24 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
 }
 
 
-struct thread_info_t {
+unsigned int AddCallNode(ThreadInfo *ti, unsigned int parent_node_id, ID mid, VALUE klass);
+
+
+struct ThreadInfo
+{
     unsigned long long int ThreadID;
 
-    method_node_info_t *NodeInfoTable;
+    MethodNodeInfo *NodeInfoTable;
     unsigned int NodeInfoTable_Size;
 
 
-    method_serialized_node_info_t *SerializedNodeInfoTable;
+    MethodNodeSerializedInfo *SerializedNodeInfoTable;
     unsigned int SerializedNodeInfoTable_Size;
-    // method_serialized_node_info_t *SerializedNodeInfoTable_back;
+    // MethodNodeSerializedInfo *SerializedNodeInfoTable_back;
 
-    serialized_stack_info_t *SerializedStackInfo;
+    StackInfo *SerializedStackInfo;
     unsigned int SerializedStackInfo_Size;
-    // serialized_stack_info_t *SerializedStackInfo_back;
+    // StackInfo *SerializedStackInfo_back;
 
 
     unsigned int ActualCallNodeSeq;
@@ -132,116 +143,105 @@ struct thread_info_t {
 
     int stop;
     
-    thread_info_t *next;
+    ThreadInfo *next;
+
+
+    ThreadInfo(unsigned long long thread_id)
+    {
+        // memset(info, 0, sizeof(ThreadInfo));
+        ThreadID = thread_id;
+        pthread_mutex_init(&GlobalMutex, NULL);
+        pthread_mutex_init(&DataMutex, NULL);
+        pthread_mutex_init(&StackMutex, NULL);
+        stop = 0;
+
+        AllocNodeTable(gDefaultNodeInfoTableSize);
+        AllocSerializedInfoTable(gDefaultSerializedNodeInfoTableSize);
+        
+        // info->SerializedNodeInfoTable = malloc(sizeof(MethodNodeSerializedInfo) * gDefaultSerializedNodeInfoTableSize);
+        // info->SerializedNodeInfoTable_Size = gDefaultSerializedNodeInfoTableSize;
+
+        SerializedStackInfo = (StackInfo *)malloc(sizeof(StackInfo) * gDefaultSerializedStackInfoSize);
+        SerializedStackInfo_Size = gDefaultSerializedStackInfoSize;
+
+        StackSize = 1;
+        
+        memset(SerializedStackInfo, 0, sizeof(StackInfo) * SerializedStackInfo_Size);
+
+        CallNodeSeq = 1;
+        ActualCallNodeSeq = 0;
+        GenerationNumber = 1;
+        CurrentCallNodeID = AddCallNode(this, 0, (ID)0, (VALUE)0);
+
+        next = NULL;
+
+        #ifdef PRINT_DEBUG
+            printf("New thread %lld\n", thread_id);
+        #endif
+    }
+
+
+    void AllocNodeTable(int size)
+    {
+        pthread_mutex_lock(&GlobalMutex);
+        NodeInfoTable = (MethodNodeInfo *)realloc(NodeInfoTable, sizeof(MethodNodeInfo) * size);
+        if(NodeInfoTable)
+            NodeInfoTable_Size = size;
+        else
+        {
+            perror("Failed to allocate NodeInfoTable");
+            abort();
+        }
+        pthread_mutex_unlock(&GlobalMutex);
+        #ifdef PRINT_DEBUG
+        cout << "*** Allocate NodeInfoTable: " << size << " records" << endl;
+        #endif
+    }
+
+
+    void AllocSerializedInfoTable(int size)
+    {
+        pthread_mutex_lock(&GlobalMutex);
+        SerializedNodeInfoTable = (MethodNodeSerializedInfo *)realloc(
+            SerializedNodeInfoTable, sizeof(MethodNodeSerializedInfo) * size);
+        if(SerializedNodeInfoTable)
+            SerializedNodeInfoTable_Size = size;
+        else
+        {
+            perror("Failed to allocate SerializedNodeInfoTable");
+            abort();
+        }
+        pthread_mutex_unlock(&GlobalMutex);
+        #ifdef PRINT_DEBUG
+        printf("*** Allocate SerializedNodeInfoTable: %d records\n", size);
+        #endif
+    }
+
 
 };
 
 
-void thread_info_alloc_node_table(thread_info_t *info, int size);
-void thread_info_alloc_serialized_node_table(thread_info_t *info, int size);
+unsigned int AddCallNode(ThreadInfo *ti, unsigned int parent_node_id, ID mid, VALUE klass);
 
 
-unsigned int AddCallNode(thread_info_t *ti, unsigned int parent_node_id, ID mid, VALUE klass);
+void thread_info_alloc_node_table(ThreadInfo *info, int size);
 
 
-void thread_info_alloc_node_table(thread_info_t *info, int size);
-
-//int gDefaultNodeInfoTableSize = 65536;
-//int gDefaultSerializedNodeInfoTableSize = 65536;
-int gDefaultNodeInfoTableSize = 16;
-int gDefaultSerializedNodeInfoTableSize = 16;
-int gDefaultSerializedStackInfoSize = 512;
-
-thread_info_t* thread_info_new(unsigned long long thread_id)
-{
-    
-    thread_info_t *info = (thread_info_t *)malloc(sizeof(thread_info_t));
-    memset(info, 0, sizeof(thread_info_t));
-
-    info->ThreadID = thread_id;
-
-            
-    pthread_mutex_init(&info->GlobalMutex, NULL);
-    pthread_mutex_init(&info->DataMutex, NULL);
-    pthread_mutex_init(&info->StackMutex, NULL);
-    info->stop = 0;
-
-    thread_info_alloc_node_table(info, gDefaultNodeInfoTableSize);
-    
-    thread_info_alloc_serialized_node_table(info, gDefaultSerializedNodeInfoTableSize);
-    
-    // info->SerializedNodeInfoTable = malloc(sizeof(method_serialized_node_info_t) * gDefaultSerializedNodeInfoTableSize);
-    // info->SerializedNodeInfoTable_Size = gDefaultSerializedNodeInfoTableSize;
-
-    info->SerializedStackInfo = (serialized_stack_info_t *)malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
-    info->SerializedStackInfo_Size = gDefaultSerializedStackInfoSize;
-
-    info->StackSize = 1;
-    
-    memset(info->SerializedStackInfo, 0, sizeof(serialized_stack_info_t) * info->SerializedStackInfo_Size);
-
-	info->CallNodeSeq = 1;
-    info->ActualCallNodeSeq = 0;
-    info->GenerationNumber = 1;
-	info->CurrentCallNodeID = AddCallNode((thread_info_t *)info, 0, (ID)0, (VALUE)0);
-
-    info->next = NULL;
-
-    #ifdef PRINT_DEBUG
-        printf("New thread %lld\n", thread_id);
-    #endif
-    return info;
-}
 
 
-void thread_info_alloc_node_table(thread_info_t *info, int size)
-{
-    pthread_mutex_lock(&info->GlobalMutex);
-	info->NodeInfoTable = (method_node_info_t *)realloc(info->NodeInfoTable, sizeof(method_node_info_t) * size);
-	if(info->NodeInfoTable)
-        info->NodeInfoTable_Size = size;
-    else
-    {
-        perror("Failed to allocate NodeInfoTable");
-        abort();
-    }
-    pthread_mutex_unlock(&info->GlobalMutex);
-    #ifdef PRINT_DEBUG
-    printf("*** Allocate NodeInfoTable: %d records\n", size);
-    #endif
-}
 
-void thread_info_alloc_serialized_node_table(thread_info_t *info, int size)
-{
-    pthread_mutex_lock(&info->GlobalMutex);
-	info->SerializedNodeInfoTable = (method_serialized_node_info_t *)realloc(
-        info->SerializedNodeInfoTable, sizeof(method_serialized_node_info_t) * size);
-	if(info->SerializedNodeInfoTable)
-        info->SerializedNodeInfoTable_Size = size;
-    else
-    {
-        perror("Failed to allocate SerializedNodeInfoTable");
-        abort();
-    }
-    pthread_mutex_unlock(&info->GlobalMutex);
-    #ifdef PRINT_DEBUG
-    printf("*** Allocate SerializedNodeInfoTable: %d records\n", size);
-    #endif
-}
-
-
-thread_info_t *gFirstThread;
-thread_info_t *gLastThread;
-__thread thread_info_t *gCurrentThread = NULL;
+ThreadInfo *gFirstThread;
+ThreadInfo *gLastThread;
+__thread ThreadInfo *gCurrentThread = NULL;
 pthread_mutex_t gThreadDataMutex = PTHREAD_MUTEX_INITIALIZER;
 unsigned long long int gThreadMaxID = 0;
 
-thread_info_t *get_current_thread()
+ThreadInfo *get_current_thread()
 {
     if(gCurrentThread != NULL)
         return gCurrentThread;
     pthread_mutex_lock(&gThreadDataMutex);
-    gCurrentThread = thread_info_new(gThreadMaxID);
+    gCurrentThread = new ThreadInfo(gThreadMaxID);
     gThreadMaxID++;
     
     if(!gLastThread)
@@ -261,34 +261,34 @@ thread_info_t *get_current_thread()
 
 
 // 送信用バッファ
-method_serialized_node_info_t *gBackBuffer_SerializedNodeInfoTable;
-serialized_stack_info_t *gBackBuffer_SerializedStackInfo;
+MethodNodeSerializedInfo *gBackBuffer_SerializedNodeInfoTable;
+StackInfo *gBackBuffer_SerializedStackInfo;
 
 int gBackBuffer_SerializedNodeInfoTable_Size;
 int gBackBuffer_SerializedStackInfo_Size;
 
 void alloc_back_buffer()
 {
-    gBackBuffer_SerializedNodeInfoTable = (method_serialized_node_info_t *)malloc(sizeof(method_serialized_node_info_t) * gDefaultSerializedNodeInfoTableSize);
+    gBackBuffer_SerializedNodeInfoTable = (MethodNodeSerializedInfo *)malloc(sizeof(MethodNodeSerializedInfo) * gDefaultSerializedNodeInfoTableSize);
     gBackBuffer_SerializedNodeInfoTable_Size = gDefaultSerializedNodeInfoTableSize;
 
-    gBackBuffer_SerializedStackInfo = (serialized_stack_info_t *)malloc(sizeof(serialized_stack_info_t) * gDefaultSerializedStackInfoSize);
+    gBackBuffer_SerializedStackInfo = (StackInfo *)malloc(sizeof(StackInfo) * gDefaultSerializedStackInfoSize);
     gBackBuffer_SerializedStackInfo_Size = gDefaultSerializedStackInfoSize;
 }
 
 
-struct method_node_key_t{
+struct CallTreeNodeKey{
     ID mid;
     VALUE klass;
     int hashval;
 };
 
-int mtbl_hash_type_cmp(method_node_key_t *a, method_node_key_t *b) 
+int mtbl_hash_type_cmp(CallTreeNodeKey *a, CallTreeNodeKey *b) 
 {
     return (a->klass != b->klass) || (a->mid != b->mid);
 }
 
-int mtbl_hash_type_hash(method_node_key_t *key) 
+int mtbl_hash_type_hash(CallTreeNodeKey *key) 
 {
    return key->hashval;
 }
@@ -300,22 +300,22 @@ struct st_hash_type mtbl_hash_type = {
 
 
 
-method_table_t* MethodTableCreate();
-void MethodKeyCalcHash(method_node_key_t* info);
-unsigned int MethodTableLookup(method_table_t *mtbl, VALUE klass, ID mid);
+MethodTable* MethodTableCreate();
+void MethodKeyCalcHash(CallTreeNodeKey* info);
+unsigned int MethodTableLookup(MethodTable *mtbl, VALUE klass, ID mid);
 
 
-method_table_t* MethodTableCreate()
+MethodTable* MethodTableCreate()
 {
-	method_table_t* mtbl = ALLOC(method_table_t);
+	MethodTable* mtbl = ALLOC(MethodTable);
 	mtbl->tbl = st_init_table(&mtbl_hash_type);
 	return mtbl;
 }
 
-unsigned int MethodTableLookup(method_table_t *mtbl, VALUE klass, ID mid)
+unsigned int MethodTableLookup(MethodTable *mtbl, VALUE klass, ID mid)
 {
 	void *ret;
-	method_node_key_t key;
+	CallTreeNodeKey key;
 	key.klass = klass;
 	key.mid = mid;
 	MethodKeyCalcHash(&key);
@@ -333,29 +333,29 @@ unsigned int MethodTableLookup(method_table_t *mtbl, VALUE klass, ID mid)
 }
 
 
-static method_serialized_node_info_t *GetSerializedNodeInfo(unsigned int call_node_id);
-static method_node_info_t *GetNodeInfo(unsigned int call_node_id);
+static MethodNodeSerializedInfo *GetSerializedNodeInfo(unsigned int call_node_id);
+static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id);
 
 
 
-void MethodKeyCalcHash(method_node_key_t* info)
+void MethodKeyCalcHash(CallTreeNodeKey* info)
 {
 	info->hashval = info->mid + info->klass;
 }
-method_node_key_t* MethodKeyCreate(method_node_info_t *info)
+CallTreeNodeKey* MethodKeyCreate(MethodNodeInfo *info)
 {
     // 作り捨て
     // ハッシュテーブルに保持するため。
     // 高々コールノード数しか作成されない。
     
-    method_node_key_t *key = (method_node_key_t *)malloc(sizeof(method_node_key_t));
+    CallTreeNodeKey *key = (CallTreeNodeKey *)malloc(sizeof(CallTreeNodeKey));
     key->mid = info->mid;
     key->klass = info->klass;
 	MethodKeyCalcHash(key);
     return key;
 }
 
-unsigned int AddCallNode(thread_info_t *ti, unsigned int parent_node_id, ID mid, VALUE klass)
+unsigned int AddCallNode(ThreadInfo *ti, unsigned int parent_node_id, ID mid, VALUE klass)
 {
     
 	if(ti->CallNodeSeq >= ti->NodeInfoTable_Size)
@@ -363,7 +363,7 @@ unsigned int AddCallNode(thread_info_t *ti, unsigned int parent_node_id, ID mid,
         thread_info_alloc_node_table(ti, ti->NodeInfoTable_Size*2);
 	}
     
-    method_node_info_t *call_node = ti->NodeInfoTable + ti->CallNodeSeq;
+    MethodNodeInfo *call_node = ti->NodeInfoTable + ti->CallNodeSeq;
     call_node->serialized_node_index = 0;
     call_node->generation_number = 0;
 
@@ -399,9 +399,9 @@ unsigned int AddCallNode(thread_info_t *ti, unsigned int parent_node_id, ID mid,
 
 unsigned int GetChildNodeID(unsigned int parent_id, ID mid, VALUE klass)
 {
-    thread_info_t *ti = CURRENT_THREAD;
+    ThreadInfo *ti = CURRENT_THREAD;
 
-	method_node_info_t *node_info = &ti->NodeInfoTable[parent_id];
+	MethodNodeInfo *node_info = &ti->NodeInfoTable[parent_id];
     
     unsigned int id = MethodTableLookup(node_info->children, klass, mid);
 	if(id == 0)
@@ -417,21 +417,18 @@ unsigned int GetChildNodeID(unsigned int parent_id, ID mid, VALUE klass)
 
 void AddActualRecord(unsigned int cnid)
 {
-    thread_info_t *ti = CURRENT_THREAD;
+    ThreadInfo *ti = CURRENT_THREAD;
 
 	if(ti->ActualCallNodeSeq >= ti->SerializedNodeInfoTable_Size)
     {
-        thread_info_alloc_serialized_node_table(
-            ti,
-            ti->SerializedNodeInfoTable_Size * 2
-        );
+        ti->AllocSerializedInfoTable(ti->SerializedNodeInfoTable_Size * 2);
     }
 
-    method_node_info_t *call_node = ti->NodeInfoTable + cnid;
+    MethodNodeInfo *call_node = ti->NodeInfoTable + cnid;
     call_node->serialized_node_index = ti->ActualCallNodeSeq;
     call_node->generation_number = ti->GenerationNumber;
 
-	method_serialized_node_info_t *sinfo = &ti->SerializedNodeInfoTable[call_node->serialized_node_index];
+	MethodNodeSerializedInfo *sinfo = &ti->SerializedNodeInfoTable[call_node->serialized_node_index];
 	sinfo->call_node_id = cnid;
 	sinfo->parent_node_id = call_node->parent_node_id;
 	sinfo->mid = call_node->mid;
@@ -454,42 +451,42 @@ void AddActualRecord(unsigned int cnid)
 
 }
 
-static method_serialized_node_info_t *GetSerializedNodeInfo(unsigned int call_node_id)
+static MethodNodeSerializedInfo *GetSerializedNodeInfo(unsigned int call_node_id)
 {
-    thread_info_t *ti = CURRENT_THREAD;
+    ThreadInfo *ti = CURRENT_THREAD;
 
     pthread_mutex_lock(&ti->DataMutex);
-    method_node_info_t* call_node = ti->NodeInfoTable + call_node_id;
+    MethodNodeInfo* call_node = ti->NodeInfoTable + call_node_id;
     if(call_node->generation_number != ti->GenerationNumber)
         AddActualRecord(call_node_id);
-    method_serialized_node_info_t *ret = ti->SerializedNodeInfoTable + call_node->serialized_node_index;
+    MethodNodeSerializedInfo *ret = ti->SerializedNodeInfoTable + call_node->serialized_node_index;
     pthread_mutex_unlock(&ti->DataMutex);
     return ret;
 }
 
-static method_serialized_node_info_t *GetSerializedNodeInfoNoAdd(unsigned int call_node_id)
+static MethodNodeSerializedInfo *GetSerializedNodeInfoNoAdd(unsigned int call_node_id)
 {
-    thread_info_t *ti = CURRENT_THREAD;
+    ThreadInfo *ti = CURRENT_THREAD;
     pthread_mutex_lock(&ti->DataMutex);
-    method_node_info_t* call_node = ti->NodeInfoTable + call_node_id;
+    MethodNodeInfo* call_node = ti->NodeInfoTable + call_node_id;
     if(call_node->generation_number != ti->GenerationNumber)
         return NULL;
-    method_serialized_node_info_t *ret = ti->SerializedNodeInfoTable + call_node->serialized_node_index;
+    MethodNodeSerializedInfo *ret = ti->SerializedNodeInfoTable + call_node->serialized_node_index;
     pthread_mutex_unlock(&ti->DataMutex);
 
     return ret;
 }
 
-static method_node_info_t *GetNodeInfo(unsigned int call_node_id)
+static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id)
 {
-    thread_info_t* ti = CURRENT_THREAD;
-    method_node_info_t* call_node = ti->NodeInfoTable + call_node_id;
+    ThreadInfo* ti = CURRENT_THREAD;
+    MethodNodeInfo* call_node = ti->NodeInfoTable + call_node_id;
     return call_node;
 }
 
 void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
 {
-    thread_info_t* ti = CURRENT_THREAD;
+    ThreadInfo* ti = CURRENT_THREAD;
 
 	if(ti->stop)
 	{
@@ -505,21 +502,21 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     unsigned int before = ti->CurrentCallNodeID;
     ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, id, klass);
     
-    method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-    method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+    MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
 
     sinfo->call_count++;
     ninfo->start_time = NOW_TIME;
 
     pthread_mutex_lock(&ti->StackMutex);
     if(ti->SerializedStackInfo_Size <= ti->StackSize) {
-        ti->SerializedStackInfo = (serialized_stack_info_t *)realloc(
+        ti->SerializedStackInfo = (StackInfo *)realloc(
                 ti->SerializedStackInfo,
-                sizeof(serialized_stack_info_t) * ti->SerializedStackInfo_Size * 2
+                sizeof(StackInfo) * ti->SerializedStackInfo_Size * 2
                 );
         ti->SerializedStackInfo_Size = ti->SerializedStackInfo_Size * 2;
     }
-    serialized_stack_info_t *stack_info = ti->SerializedStackInfo + ti->StackSize;
+    StackInfo *stack_info = ti->SerializedStackInfo + ti->StackSize;
     ti->StackSize++;
     stack_info->start_time = ninfo->start_time;
     stack_info->node_id = ti->CurrentCallNodeID;
@@ -533,7 +530,7 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 {
     
 
-    thread_info_t* ti = CURRENT_THREAD;
+    ThreadInfo* ti = CURRENT_THREAD;
     // Rubyのバグ？
     // require終了時にも呼ばれる(バージョンがある)ようなのでスキップ
 
@@ -549,9 +546,9 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 	VALUE klass;
 
     rb_frame_method_id_and_class( &id, &klass);
-    method_serialized_node_info_t *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-    method_node_info_t *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
-    method_serialized_node_info_t *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
+    MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+    MethodNodeSerializedInfo *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
     
     time_val_t diff = NOW_TIME - ninfo->start_time;
     //time_val_t diff = 0;
@@ -586,7 +583,7 @@ typedef struct
 
 
 
-void print_tree_st(method_node_info_t *key, unsigned int id, st_data_t data)
+void print_tree_st(MethodNodeInfo *key, unsigned int id, st_data_t data)
 {
 	print_tree_prm_t *prm = (print_tree_prm_t *)data;
 	print_tree(id, prm->indent);
@@ -594,9 +591,9 @@ void print_tree_st(method_node_info_t *key, unsigned int id, st_data_t data)
 
 void print_tree(unsigned int id, int indent)
 {
-    thread_info_t* ti = CURRENT_THREAD;
-    method_node_info_t *info = &ti->NodeInfoTable[id];
-	method_serialized_node_info_t *sinfo = &ti->SerializedNodeInfoTable[id];
+    ThreadInfo* ti = CURRENT_THREAD;
+    MethodNodeInfo *info = &ti->NodeInfoTable[id];
+	MethodNodeSerializedInfo *sinfo = &ti->SerializedNodeInfoTable[id];
 
 	int i = 0;
 	for(; i < indent; i++)
@@ -614,13 +611,13 @@ void print_tree(unsigned int id, int indent)
 
 void print_table()
 {
-    thread_info_t *ti = CURRENT_THREAD;
+    ThreadInfo *ti = CURRENT_THREAD;
     printf("%8s %16s %24s %8s %12s %16s %16s\n", "id", "class", "name", "p-id", "count", "all-t", "self-t");
 	int i = 1;
 	for(i = 1; i < ti->CallNodeSeq; i++)
 	{
-		method_node_info_t *info = GetNodeInfo(i);
-		method_serialized_node_info_t *sinfo = GetSerializedNodeInfoNoAdd(i);
+		MethodNodeInfo *info = GetNodeInfo(i);
+		MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfoNoAdd(i);
         if(!sinfo)
             continue;
 		printf(
@@ -642,7 +639,7 @@ VALUE CallTree_PrintStat(VALUE self, VALUE obj)
 {
 	
 	printf("[All threads]\n");
-    thread_iterator iter;
+    ThreadIterator iter;
     BufferIteration_Initialize(&iter);
     unsigned long long int node_counter = 0;
     while(BufferIteration_NextBuffer(&iter))
@@ -681,22 +678,22 @@ void CallTree_Init()
     
 
     #ifdef PRINT_DEBUG
-    PRINTSIZEOF(method_node_info_t);
-    PRINTSIZEOF(method_serialized_node_info_t);
+    PRINTSIZEOF(MethodNodeInfo);
+    PRINTSIZEOF(MethodNodeSerializedInfo);
     #endif
 }
 
 
 
 
-void BufferIteration_Initialize(thread_iterator *iter)
+void BufferIteration_Initialize(ThreadIterator *iter)
 {
     iter->current_thread = gFirstThread;
     iter->phase = 0;
     iter->got_flag = 0;
 }
 
-int BufferIteration_NextBuffer(thread_iterator *iter)
+int BufferIteration_NextBuffer(ThreadIterator *iter)
 {
     iter->got_flag = 0;
     if(!iter->current_thread)
@@ -724,11 +721,11 @@ int BufferIteration_NextBuffer(thread_iterator *iter)
 }
 
 
-void CallTree_GetSerializedBuffer(thread_info_t *thread, void **buf, unsigned int *size)
+void CallTree_GetSerializedBuffer(ThreadInfo *thread, void **buf, unsigned int *size)
 {
-    method_serialized_node_info_t *tmp;
+    MethodNodeSerializedInfo *tmp;
     pthread_mutex_lock(&thread->DataMutex);
-	*size = sizeof(method_serialized_node_info_t) * thread->ActualCallNodeSeq;
+	*size = sizeof(MethodNodeSerializedInfo) * thread->ActualCallNodeSeq;
     tmp = thread->SerializedNodeInfoTable;
     thread->SerializedNodeInfoTable = gBackBuffer_SerializedNodeInfoTable;
     thread->GenerationNumber++;
@@ -743,12 +740,12 @@ void CallTree_GetSerializedBuffer(thread_info_t *thread, void **buf, unsigned in
     pthread_mutex_unlock(&thread->DataMutex);
 }
 
-void CallTree_GetSerializedStackBuffer(thread_info_t *thread, void **buf, unsigned int *size)
+void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned int *size)
 {    
-    serialized_stack_info_t *tmp;
+    StackInfo *tmp;
     if(gBackBuffer_SerializedStackInfo)
     {
-        memset(gBackBuffer_SerializedStackInfo, 0, sizeof(serialized_stack_info_t) * gBackBuffer_SerializedStackInfo_Size);
+        memset(gBackBuffer_SerializedStackInfo, 0, sizeof(StackInfo) * gBackBuffer_SerializedStackInfo_Size);
     }
 
     pthread_mutex_lock(&thread->StackMutex);
@@ -756,7 +753,7 @@ void CallTree_GetSerializedStackBuffer(thread_info_t *thread, void **buf, unsign
     thread->SerializedStackInfo = gBackBuffer_SerializedStackInfo;
     gBackBuffer_SerializedStackInfo = tmp;
 
- 	*size = sizeof(serialized_stack_info_t) * thread->StackSize;
+ 	*size = sizeof(StackInfo) * thread->StackSize;
 	*buf = gBackBuffer_SerializedStackInfo;
     
     int tmp_sz;
@@ -770,7 +767,7 @@ void CallTree_GetSerializedStackBuffer(thread_info_t *thread, void **buf, unsign
     
 }
 
-void BufferIteration_GetBuffer(thread_iterator *iter, void **buf, unsigned int *size)
+void BufferIteration_GetBuffer(ThreadIterator *iter, void **buf, unsigned int *size)
 {
     assert(iter->got_flag == 0);
     iter->got_flag = 1;
@@ -787,12 +784,12 @@ void BufferIteration_GetBuffer(thread_iterator *iter, void **buf, unsigned int *
     assert(0);
 }
 
-unsigned long long BufferIteration_GetThreadID(thread_iterator *iter)
+unsigned long long BufferIteration_GetThreadID(ThreadIterator *iter)
 {
     return iter->current_thread->ThreadID;
 }
 
-int BufferIteration_GetBufferType(thread_iterator *iter)
+int BufferIteration_GetBufferType(ThreadIterator *iter)
 {
     if(iter->phase == 1)
     {
