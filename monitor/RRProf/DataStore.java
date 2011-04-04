@@ -685,7 +685,6 @@ public class DataStore {
 
     public void recordData(ProfileData data)
     {
-    	if(true) return;
     	long target_thread = data.getTargetThreadID();
     	ThreadStore thread_store = getThreadStore(target_thread, true);
     	List<RunningRecordInfo> running_records = thread_store.runningRecords;
