@@ -1,4 +1,4 @@
-
+﻿
 
 #include <assert.h>
 #include <time.h>
@@ -178,8 +178,8 @@ struct ThreadInfo
 
 ThreadInfo *gFirstThread;
 ThreadInfo *gLastThread;
-__thread ThreadInfo *gCurrentThread = NULL;
-pthread_mutex_t gThreadDataMutex = PTHREAD_MUTEX_INITIALIZER;
+TLS_DECLARE ThreadInfo *gCurrentThread = NULL;
+pthread_mutex_t gThreadDataMutex;
 unsigned long long int gThreadMaxID = 0;
 
 ThreadInfo *get_current_thread()
@@ -479,8 +479,8 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 
 void CallTree_RegisterModeFunction()
 {
-	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL, Qnil);
-	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN, Qnil);
+	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
+	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
 }
 
 
@@ -598,6 +598,10 @@ void CallTree_Init()
     #endif
 }
 
+void CallTree_InitModule()
+{
+    pthread_mutex_init(&gThreadDataMutex, NULL);
+}
 
 
 

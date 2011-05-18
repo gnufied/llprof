@@ -151,6 +151,8 @@ void Init_rrprof(void)
         print_option_flags();
     #endif
 
+    CallTree_InitModule();
+
     #ifdef TIMERMODE_TIMERTHREAD
     start_timer_thread();
     #endif

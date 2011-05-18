@@ -29,7 +29,24 @@ int pthread_detach(pthread_t th)
 {
     return 0;
 }
+int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr)
+{
+    InitializeCriticalSection(&mutex->cs_);
+}
 
+int pthread_mutex_destroy(pthread_mutex_t *mutex)
+{
+    DeleteCriticalSection(&mutex->cs_);
+}
 
+int pthread_mutex_lock(pthread_mutex_t *mutex)
+{
+    EnterCriticalSection(&mutex->cs_);
+}
+
+int pthread_mutex_unlock(pthread_mutex_t *mutex)
+{
+    LeaveCriticalSection(&mutex->cs_);
+}
 
 #endif

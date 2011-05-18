@@ -114,6 +114,7 @@ void slide_info_to_str(char *str, int maxsz)
 
 void msg_handler(int sock, int msg_id, int size, char *msgbuf)
 {
+    // それぞれのメッセージの意味は > rrprof_const.h
     switch(msg_id)
     {
     case MSG_START_PROFILE:

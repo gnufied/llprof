@@ -1,9 +1,17 @@
+﻿/* call_tree.h - コールツリーのデータ構造、管理
+ * 
+ */
+
 #ifndef CALL_TREE_H
 #define CALL_TREE_H
 
 #include <ruby/ruby.h>
 
+// モジュールの初期化時
+void CallTree_InitModule();
+// コールツリーデータの初期化
 void CallTree_Init();
+
 void CallTree_RegisterModeFunction();
 VALUE CallTree_PrintStat(VALUE self, VALUE obj);
 void CallTree_GetSlide(slide_record_t **ret, int *nfield);

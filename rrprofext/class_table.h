@@ -1,8 +1,13 @@
+
+/* class_table.h - クラス名テーブルとメソッド名テーブルのデータ構造
+ */
+
 #ifndef RRPROF_CLASSTBL_H
 #define RRPROF_CLASSTBL_H
 
 #include <ruby/ruby.h>
-#include <pthread.h>
+
+#include "platforms.h"
 
 
 class NameTable

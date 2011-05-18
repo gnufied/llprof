@@ -1,9 +1,12 @@
+/* server.h - モニタから接続されるためのサーバースレッド
+ *  
+ */
 #ifndef SERVER_H
 #define SERVER_H
 
 
 
-
+// サーバースレッドの開始
 void start_server();
 
 
