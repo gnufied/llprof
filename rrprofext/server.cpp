@@ -4,19 +4,9 @@
 #include "server.h"
 #include "rrprof_const.h"
 
-#include <pthread.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 #include <assert.h>
-#include <time.h>
-#include <unistd.h>
-#include <errno.h>
 #include <string.h>
-
+#include "platforms.h"
 #include "rrprof.h"
 #include "call_tree.h"
 #include "class_table.h"

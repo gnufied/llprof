@@ -1,5 +1,5 @@
-
-/* class_table.h - ƒNƒ‰ƒX–¼ƒe[ƒuƒ‹‚Æƒƒ\ƒbƒh–¼ƒe[ƒuƒ‹‚Ìƒf[ƒ^\‘¢
+ï»¿
+/* class_table.h - ã‚¯ãƒ©ã‚¹åãƒ†ãƒ¼ãƒ–ãƒ«ã¨ãƒ¡ã‚½ãƒƒãƒ‰åãƒ†ãƒ¼ãƒ–ãƒ«ã®ãƒ‡ãƒ¼ã‚¿æ§‹é€ 
  */
 
 #ifndef RRPROF_CLASSTBL_H

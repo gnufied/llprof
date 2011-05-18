@@ -1,8 +1,8 @@
-
+﻿
 #include <iostream>
 using namespace std;
 
-#include <pthread.h>
+#include "platforms.h"
 #include "class_table.h"
 
 NameTable gMethodTbl, gClassTbl;
@@ -32,7 +32,7 @@ struct st_hash_type clstbl_hash_type = {
     (st_index_t (*)(...)) clstbl_hash
 };
 
-__thread const char *nullstr = "(null)";
+const char *nullstr = "(null)";
 const char *new_str(const char *str)
 {
     if(!str)
@@ -68,7 +68,7 @@ void NameTable::AddCB(Key key, const char * cb(Key key))
     pthread_mutex_unlock(&mtx_);
 }
 
-__thread const char *null_str = "(ERR)";
+const char *null_str = "(ERR)";
 const char * NameTable::Get(Key entry)
 {
     char *name;

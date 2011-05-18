@@ -178,30 +178,35 @@ struct ThreadInfo
 
 ThreadInfo *gFirstThread;
 ThreadInfo *gLastThread;
-TLS_DECLARE ThreadInfo *gCurrentThread = NULL;
+
+pthread_key_t gCurrentThreadKey;
+
 pthread_mutex_t gThreadDataMutex;
 unsigned long long int gThreadMaxID = 0;
 
 ThreadInfo *get_current_thread()
 {
-    if(gCurrentThread != NULL)
-        return gCurrentThread;
+    ThreadInfo *tdata = (ThreadInfo *)pthread_getspecific(gCurrentThreadKey);
+    if(tdata)
+        return tdata;
+
     pthread_mutex_lock(&gThreadDataMutex);
-    gCurrentThread = new ThreadInfo(gThreadMaxID);
-    gThreadMaxID++;
+    tdata = new ThreadInfo(gThreadMaxID);
+    pthread_setspecific(gCurrentThreadKey, tdata);
     
+    gThreadMaxID++;
     if(!gLastThread)
     {
-        gFirstThread = gLastThread = gCurrentThread;
+        gFirstThread = gLastThread = tdata;
     }
     else
     {
-        gLastThread->next = gCurrentThread;
-        gLastThread = gCurrentThread;
+        gLastThread->next = tdata;
+        gLastThread = tdata;
     }
     pthread_mutex_unlock(&gThreadDataMutex);
-    assert(gCurrentThread);
-    return gCurrentThread;
+    assert(tdata);
+    return tdata;
 }
 #define CURRENT_THREAD      ((get_current_thread()))
 
@@ -576,6 +581,7 @@ VALUE CallTree_PrintStat(VALUE self, VALUE obj)
     printf("  All Call Nodes: %lld\n", node_counter);
     
     //print_table();
+    return 0;
 }
 
 
@@ -601,6 +607,7 @@ void CallTree_Init()
 void CallTree_InitModule()
 {
     pthread_mutex_init(&gThreadDataMutex, NULL);
+    pthread_key_create(&gCurrentThreadKey, NULL);
 }
 
 
@@ -707,6 +714,7 @@ int BufferIteration_GetBufferType(ThreadIterator *iter)
         return BT_STACK;
     }
     assert(0);
+    return 0;
 }
 
 

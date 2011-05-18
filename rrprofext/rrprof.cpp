@@ -3,18 +3,9 @@
 // #include <vm_core.h>
 #include <assert.h>
 #include <time.h>
-#include <unistd.h>
 #include <errno.h>
 
-
-#include <pthread.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-
+#include "platforms.h"
 #include "rrprof.h"
 #include "call_tree.h"
 #include "server.h"
@@ -44,6 +35,7 @@ time_val_t GetNowTime()
 	return 0;
 }
 */
+#ifndef _WIN32
 time_val_t GetNowTime_clock_gettime_monotonic()
 {
 	struct timespec tp;
@@ -53,6 +45,18 @@ time_val_t GetNowTime_clock_gettime_monotonic()
     // return (time_val_t)tp.tv_nsec;
 	return ((time_val_t)tp.tv_sec)*1000*1000*1000 + ((time_val_t)tp.tv_nsec);
 }
+#else
+time_val_t GetNowTime_clock_gettime_monotonic()
+{
+    FILETIME ft;
+    ULARGE_INTEGER u64Time;
+    GetSystemTimeAsFileTime(&ft);
+    u64Time.u.LowPart = ft.dwLowDateTime;
+    u64Time.u.HighPart = ft.dwHighDateTime;
+    return u64Time.QuadPart * 100;
+}
+
+#endif
 /*
 time_val_t GetNowTime()
 {
