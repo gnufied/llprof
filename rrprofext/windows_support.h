@@ -10,7 +10,7 @@
 typedef HANDLE pthread_t;
 struct pthread_attr_t{
     int dummy_;
-}
+};
 typedef CRITICAL_SECTION pthread_mutex_t;
 
 
