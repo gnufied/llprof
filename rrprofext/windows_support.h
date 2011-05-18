@@ -1,3 +1,6 @@
+/* windows_support.h - WindowsとUNIXの差分を埋めるためのサポート
+ */
+
 #ifndef RRPROF_WINDOWS_SUPPORT
 #define RRPROF_WINDOWS_SUPPORT
 #ifdef _WIN32
