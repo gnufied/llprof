@@ -13,15 +13,18 @@
 
 using namespace std;
 
+#ifdef _WIN32
+#   include <winsock2.h>
+#endif
 
 pthread_t gServerThread;
 
-int write_full(int sock, char *pbuf, int sz)
+int send_full(int sock, char *pbuf, int sz)
 {
     int offset = 0;
     while(1)
     {
-        int wrote_sz = write(sock, pbuf + offset, sz - offset);
+        int wrote_sz = send(sock, pbuf + offset, sz - offset, 0);
         if(wrote_sz <= 0)
             return 1;
         offset += wrote_sz;
@@ -31,12 +34,12 @@ int write_full(int sock, char *pbuf, int sz)
     }    
 }
 
-int read_full(int sock, char *pbuf, int sz)
+int recv_full(int sock, char *pbuf, int sz)
 {
     int offset = 0;
     while(1)
     {
-        int read_sz = read(sock, pbuf + offset, sz - offset);
+        int read_sz = recv(sock, pbuf + offset, sz - offset, 0);
         if(read_sz <= 0)
         {
             if(read_sz != 0)
@@ -64,11 +67,11 @@ void SendMessage2(int sock, int msg_id, void *buf1, int buf_sz1, void *buf2, int
 {
     // printf("Send: type:%d  size:%d\n", msg_id, buf_sz);
     unsigned int msg[] = {msg_id, buf_sz1+buf_sz2};
-    write_full(sock, (char *)msg, 8);
+    send_full(sock, (char *)msg, 8);
     if(buf_sz1 != 0)
-        write_full(sock, (char *)buf1, buf_sz1);
+        send_full(sock, (char *)buf1, buf_sz1);
     if(buf_sz2 != 0)
-        write_full(sock, (char *)buf2, buf_sz2);
+        send_full(sock, (char *)buf2, buf_sz2);
 }
 
 
@@ -211,7 +214,12 @@ void *rrprof_server_thread(void *p)
 	int listening_sock;
 	struct sockaddr_in listening_addr;
 	int ret;
-	
+
+#   ifdef _WIN32
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2,0), &wsaData);
+#   endif
+
 	listening_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(listening_sock == -1)
 		perror("socket");
@@ -258,7 +266,7 @@ void *rrprof_server_thread(void *p)
 		{
             char msg_buf[65536];
             memset(msg_buf, 255, 65536);
-			if(read_full(sock, (char *)msg, 8))
+			if(recv_full(sock, (char *)msg, 8))
 				break;
 			int msg_id = msg[0];
 			int msg_sz = msg[1];
@@ -268,7 +276,7 @@ void *rrprof_server_thread(void *p)
                 abort();
             }
             if(msg_sz > 0)
-                if(read_full(sock, msg_buf, msg_sz))
+                if(recv_full(sock, msg_buf, msg_sz))
                 {
                     break;
                 }
@@ -278,6 +286,11 @@ void *rrprof_server_thread(void *p)
         printf("Disconnected\n");
         #endif
 	}
+    
+#   ifdef _WIN32
+        WSACleanup();
+#   endif
+
 }
 
 
