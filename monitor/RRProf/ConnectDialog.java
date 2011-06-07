@@ -36,7 +36,7 @@ public class ConnectDialog extends JDialog implements ActionListener {
 		
 		hostField = new JTextField(option_file.getProperty("monitor.host", "localhost"), 15);
 		portField = new JTextField(option_file.getProperty("monitor.port", "12321"), 15);
-		intervalField = new JTextField(option_file.getProperty("monitor.interval", "100"), 15);
+		intervalField = new JTextField(option_file.getProperty("monitor.interval", "500"), 15);
 		JButton connectBtn = new JButton("Connect");
 		connectBtn.addActionListener(this);
 		getContentPane().setLayout(new GridLayout(4,2));
