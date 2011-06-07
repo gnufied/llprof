@@ -211,6 +211,7 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
 
 void *rrprof_server_thread(void *p)
 {
+	cout << "Server Thread Started." << endl;
 	int listening_sock;
 	struct sockaddr_in listening_addr;
 	int ret;
@@ -297,6 +298,6 @@ void *rrprof_server_thread(void *p)
 void start_server()
 {
     pthread_create(&gServerThread, NULL, rrprof_server_thread, NULL);
-    pthread_detach(gServerThread); 
+    pthread_detach(gServerThread);
 }
 

@@ -17,7 +17,7 @@
 // #define DO_NOTHING_IN_HOOK          1
 // #define PRINT_FLAGS                 1
 
-// #define PRINT_DEBUG                 1
+#define PRINT_DEBUG                 1
 
 // ENABLE_RUBY_RUNTIME_INFO depends on ENABLE_SEARCH_NODES
 

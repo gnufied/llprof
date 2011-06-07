@@ -18,6 +18,7 @@ void __cdecl no_return_func(void *p)
 
 int pthread_create(pthread_t *thread, pthread_attr_t *attr, void * (*start_routine)(void *), void *arg)
 {
+	cout << "pthread_create." << endl;
     no_return_func_param_t *param = new no_return_func_param_t();
     param->start_routine = start_routine;
     param->arg = arg;
