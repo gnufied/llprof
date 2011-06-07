@@ -46,6 +46,7 @@ NameTable::NameTable()
 {
     pthread_mutex_init(&mtx_, NULL);
     table_ = st_init_table(&clstbl_hash_type);
+    cout << "Name Table Initialized: " << (void *)table_ << endl;
 }
 
 

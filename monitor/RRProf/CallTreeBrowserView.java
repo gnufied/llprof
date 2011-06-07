@@ -3,6 +3,7 @@ package RRProf;
 import java.awt.Component;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -20,6 +21,7 @@ import javax.swing.tree.TreePath;
 
 import RRProf.DataStore.AbstractRecord;
 import RRProf.DataStore.CallNameRecordSet;
+import RRProf.DataStore.Record;
 import RRProf.DataStore.ThreadStore;
 
 public class CallTreeBrowserView extends JTree implements KeyListener {
@@ -43,6 +45,11 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 			threadDataStore = thread_data_store;
 			threadID = threadDataStore.getThreadID();
 		}
+		
+		public Record getRootRecord() {
+			return threadDataStore.getRootRecord();
+		}
+		
 		@Override
 		public Object getChild(int index) {
 			return threadDataStore.getRootRecord().getChild(index);
@@ -346,7 +353,7 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 		rootNode = new RootNode();
 		setModel(null);
 		setCellRenderer(null);
-
+		setScrollsOnExpand(true);
 		this.addKeyListener(this);
 	}
 	
@@ -379,4 +386,57 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 	@Override
 	public void keyTyped(KeyEvent e) {
 	}
+	
+	static final int OTM_ACTIVE = 1;
+	static final int OTM_BOTTLENECK = 2;
+
+	public void openTree(int open_mode){
+		RootNode tree_root = ((RootNode)model.getRoot());
+		int nThreads = tree_root.getChildCount();
+		for(int i = 0; i < nThreads; i++)
+		{
+			ThreadNode th_node = (ThreadNode)tree_root.getChild(i);
+			AbstractRecord node = th_node.getRootRecord();
+
+			ArrayList path = new ArrayList();
+			path.add(tree_root);
+			path.add(th_node);
+			while(true)
+			{
+				AbstractRecord next = null;
+				if(open_mode == OTM_ACTIVE)
+				{
+					for(AbstractRecord rec: node.allChild())
+					{
+						if(rec.isRunning())
+						{
+							next = rec;
+							break;
+						}
+					}
+				}
+				else if(open_mode == OTM_BOTTLENECK)
+				{
+					long current_heavy_val = 0;
+					for(AbstractRecord rec: node.allChild())
+					{
+						if(rec.getAllTime() > current_heavy_val)
+						{
+							current_heavy_val = rec.getAllTime();
+							next = rec;
+						}
+					}
+				}
+				if(next == null)
+					break;
+				path.add(next);
+				node = next;
+			}
+			TreePath tpath = new TreePath(path.toArray());
+			this.expandPath(tpath);
+			this.setSelectionPath(tpath);
+		}
+		
+	}
+	
 }

@@ -1,4 +1,4 @@
-/* platforms.h - ƒvƒ‰ƒbƒgƒz[ƒ€‚²‚Æ‚Ì·ˆÙ‚ğ‹zû‚·‚é‚½‚ß‚Ìƒwƒbƒ_
+ï»¿/* platforms.h - ãƒ—ãƒ©ãƒƒãƒˆãƒ•ã‚©ãƒ¼ãƒ ã®å·®ç•°ã‚’ã†ã‚ã‚‹
  * 
  */
 #ifndef PLATFORMS_H
@@ -17,6 +17,7 @@
 #   include <netdb.h>
 #   include <netinet/in.h>
 #   include <arpa/inet.h>
+#   include <errno.h>
 #   define TLS_DECLARE  __declspec( thread )
 #else
 #   define TLS_DECLARE  __thread

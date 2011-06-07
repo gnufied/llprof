@@ -409,7 +409,7 @@ unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, ID mid, VALUE 
 }
 
 
-void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
+void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
 {
     ThreadInfo* ti = CURRENT_THREAD;
 
@@ -421,8 +421,15 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     
 	ID id;
 	VALUE klass;
-
-    rb_frame_method_id_and_class(&id, &klass);
+    if(event == RUBY_EVENT_C_CALL)
+    {
+        id = p_id;
+        klass = p_klass;
+    }
+    else
+    {
+        rb_frame_method_id_and_class(&id, &klass);
+    }
 
     unsigned int before = ti->CurrentCallNodeID;
     ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, id, klass);
@@ -439,11 +446,12 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     stack_info->node_id = ti->CurrentCallNodeID;
     pthread_mutex_unlock(&ti->StackMutex);
 
-	ti->stop = 0;	
+	ti->stop = 0;
+
 }
 
 
-void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
+void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
 {
     
 
@@ -461,8 +469,16 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 
 	ID id;
 	VALUE klass;
+    if(event == RUBY_EVENT_C_RETURN)
+    {
+        id = p_id;
+        klass = p_klass;
+    }
+    else
+    {
+        rb_frame_method_id_and_class(&id, &klass);
+    }
 
-    rb_frame_method_id_and_class( &id, &klass);
     MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
     MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
     MethodNodeSerializedInfo *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
@@ -484,8 +500,12 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 
 void CallTree_RegisterModeFunction()
 {
+    
 	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
 	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
+    
+	//rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL, Qnil);
+	//rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN, Qnil);
 }
 
 

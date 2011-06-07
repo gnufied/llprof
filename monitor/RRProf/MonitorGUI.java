@@ -82,10 +82,18 @@ public class MonitorGUI extends JFrame implements ActionListener {
         JMenu menuFile = new JMenu("File");
         menuFile.setMnemonic('F');
         menuBar.add(menuFile);
-            JMenuItem menuConnect = new JMenuItem("Connect");
-            menuConnect.setMnemonic('C');
-            menuConnect.addActionListener(this);
-        menuFile.add(menuConnect);
+	        JMenuItem menuConnect = new JMenuItem("Connect");
+	        menuConnect.setMnemonic('C');
+	        menuConnect.addActionListener(this);
+	        menuFile.add(menuConnect);
+	        JMenuItem menuOpenActive = new JMenuItem("Open Active");
+	        menuOpenActive.setMnemonic('O');
+	        menuOpenActive.addActionListener(this);
+	        menuFile.add(menuOpenActive);
+	        JMenuItem menuOpenHeavy = new JMenuItem("Open Heavy");
+	        menuOpenHeavy.setMnemonic('H');
+	        menuOpenHeavy.addActionListener(this);
+	        menuFile.add(menuOpenHeavy);
         getRootPane().setJMenuBar(menuBar);
         
         numRecordsField = addStatisticsField("numRecords", "Number of records", new Long(0));
@@ -109,11 +117,20 @@ public class MonitorGUI extends JFrame implements ActionListener {
     }
     
 	public void actionPerformed(ActionEvent e) {
-        if(e.getActionCommand() == "Connect")
+		if(e.getActionCommand() == "Connect")
         {
-            ConnectDialog dlg = new ConnectDialog(this);
-            dlg.setVisible(true);
+			ConnectDialog dlg = new ConnectDialog(this);
+			dlg.setVisible(true);
         }
+		else if(e.getActionCommand() == "Open Active")
+        {
+			callTreeBrowser.openTree(CallTreeBrowserView.OTM_ACTIVE);
+        }
+		else if(e.getActionCommand() == "Open Heavy")
+        {
+			callTreeBrowser.openTree(CallTreeBrowserView.OTM_BOTTLENECK);
+        }
+        
 	}
 	
 	public void connect(String host, int port, int interval) {
