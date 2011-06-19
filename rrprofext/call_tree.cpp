@@ -8,6 +8,7 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <map>
 
 #include "platforms.h"
 
@@ -266,6 +267,26 @@ T *new_tail_elem(vector<T> &arr)
     return &arr[arr.size() - 1];
 }
 
+#ifdef DEBUG_NAMEMAP
+
+map<unsigned long long, nameid_t> g_namemap;
+unsigned long long toLong(unsigned int nid, nameid_t nameid)
+{
+    return ((unsigned long long)nid << 48) + (unsigned long long)nameid;
+}
+
+int viz_table_print(nameid_t *key, unsigned long long id, st_data_t data)
+{
+    cout << "  - " << *key << " ID:" << id << endl;
+    return ST_CONTINUE;
+}
+
+void viz_table(st_table *tbl)
+{
+    st_foreach(tbl, (int (*)(...))viz_table_print, NULL);
+}
+
+#endif
 
 unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_data_ptr)
 {
@@ -273,12 +294,38 @@ unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_
 
 	MethodNodeInfo *node_info = &ti->NodeInfoArray[parent_id];
     
+    
+    
     unsigned int id = MethodTableLookup(node_info->children, nameid);
 	if(id == 0)
 	{
 		id = ti->AddCallNode(parent_id, nameid, name_data_ptr);
-	}
-    
+#ifdef DEBUG_NAMEMAP
+        cout << "[New] ";
+    }
+    else
+    {
+        cout << "      ";
+#endif
+    }
+#ifdef DEBUG_NAMEMAP
+    cout << "P-ID:" << parent_id << " NameID:" << nameid << " id:" << id << " tbl:" << (void *)node_info->children->tbl << endl;
+    viz_table(node_info->children->tbl);
+
+    map<unsigned long long, nameid_t>::iterator it = g_namemap.find(toLong(parent_id, nameid));
+    if(it == g_namemap.end())
+    {
+        g_namemap.insert(make_pair(toLong(parent_id, nameid), id));
+    }
+    else
+    {
+        if(((*it).second) != id)
+        {
+            cout << "Error!! Prev:" << (*it).second << endl;
+            assert(false);
+        }
+    }        
+#endif
 	return id;
 }
 
@@ -368,7 +415,7 @@ unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, nameid_t namei
     {
         st_insert(
             GetNodeInfo(parent_node_id)->children->tbl,
-            (st_data_t)&call_node->nameid,
+            (st_data_t)new nameid_t(call_node->nameid), // call_nodeはvector上にあるので、動く可能性がある
             (st_data_t)(NodeInfoArray.size() - 1)
         );
     }
