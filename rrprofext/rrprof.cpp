@@ -13,26 +13,13 @@
 #include <sstream>
 using namespace std;
 
-void rp_assert_failure(char *expr)
-{
-    printf("rp_assert_failure: %s\n", expr);
-    abort();
-}
-/*
-time_val_t gTimeCounter;
-time_val_t GetNowTime()
-{
-	return 0;
-}
-*/
+
 #ifndef _WIN32
 time_val_t GetNowTime_clock_gettime_monotonic()
 {
 	struct timespec tp;
-	//clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &tp);
 	clock_gettime(CLOCK_MONOTONIC, &tp);
     
-    // return (time_val_t)tp.tv_nsec;
 	return ((time_val_t)tp.tv_sec)*1000*1000*1000 + ((time_val_t)tp.tv_nsec);
 }
 #else
@@ -47,75 +34,13 @@ time_val_t GetNowTime_clock_gettime_monotonic()
 }
 
 #endif
-/*
-time_val_t GetNowTime()
-{
-    unsigned long long ret;
-    __asm__ volatile ("rdtsc" : "=A" (ret));
-    return ret;
-}
-
-time_val_t GetNowTime()
-{
-     unsigned a, d;
-     asm("cpuid");
-     asm volatile("rdtsc" : "=a" (a), "=d" (d));
-
-     return (((time_val_t)a) | (((time_val_t)d) << 32));
-}
-*/
 
 #ifdef TIMERMODE_CLOCK_TIMERTHREAD
 time_val_t gTimerCounter = 0;
 #endif
 
-/*static VALUE
-print_stat(VALUE self, VALUE obj)
-{
-    CallTree_PrintStat(self, obj);
-    return NULL;
-}
-*/
-
-void
-print_test(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
-{
-	ID id;
-	VALUE klass;
-    rb_frame_method_id_and_class( &id, &klass);
-    const char *name = rb_id2name(id);
-    int line = rb_sourceline();
-    printf("print_test: Current method: %s [%d]\n", name, line);
-}
-
-
 void rrprof_exit (void);
 
-
-void print_option_flags()
-{
-    printf("Option builtin Flags: ");
-    #ifdef ENABLE_TIME_GETTING
-        printf("ENABLE_TIME_GETTING ");
-    #endif
-    #ifdef ENABLE_RUBY_RUNTIME_INFO  
-        printf("ENABLE_RUBY_RUNTIME_INFO ");
-    #endif
-    #ifdef ENABLE_SEARCH_NODES       
-        printf("ENABLE_SEARCH_NODES ");
-    #endif
-    #ifdef ENABLE_CALC_TIMES         
-        printf("ENABLE_CALC_TIMES ");
-    #endif
-    #ifdef ENABLE_STACK
-        printf("ENABLE_STACK ");
-    #endif
-    
-    #ifdef DO_NOTHING_IN_HOOK
-        printf("DO_NOTHING_IN_HOOK ");
-    #endif
-    printf(".\n");
-}
 
 
 #ifdef TIMERMODE_TIMERTHREAD
@@ -148,16 +73,15 @@ const char *rrprof_name_func(void *name_info_ptr)
         return "(null)";
 
     stringstream s;
-    
     s << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass);
     s << "::";
     s << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
     return s.str().c_str();
 }
 
-inline nameid_t RubyNameInfoToNameID(VALUE klass, ID id)
+inline nameid_t nameinfo_to_nameid(const ruby_name_info_t &nameinfo)
 {
-    return (unsigned long long)klass * (unsigned long long)id;
+    return (unsigned long long)nameinfo.klass * (unsigned long long)nameinfo.id;
 }
 
 void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
@@ -169,12 +93,8 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
         ruby_name_info.klass = p_klass;
     }
     else
-    {
         rb_frame_method_id_and_class(&ruby_name_info.id, &ruby_name_info.klass);
-    }
-    
-    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
-
+    nameid_t nameid = nameinfo_to_nameid(ruby_name_info);
     llprof_call_handler(nameid, (void *)&ruby_name_info);
 }
 
@@ -210,9 +130,7 @@ void Init_rrprof(void)
     #endif
     start_server();
 	VALUE rrprof_mod = rb_define_module("RRProf");
-    // rb_define_module_function(rrprof_mod, "print_stat", (VALUE (*)(...))print_stat, 0);
 
-    
 	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
 	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
 
@@ -231,7 +149,6 @@ void rrprof_exit (void)
     if(ep_mode && !strcmp(ep_mode, "1"))
     {
         printf("[rrprof exit]\n");
-        //print_stat(Qnil, Qnil);
     }
 }
 
@@ -252,45 +169,6 @@ void HexDump(char *buf, int size)
     }
     printf("\n");
 }
-
-
-
-/*
-VALUE CallTree_PrintStat(VALUE self, VALUE obj)
-{
-	
-	printf("[All threads]\n");
-    ThreadIterator iter;
-    BufferIteration_Initialize(&iter);
-    unsigned long long int node_counter = 0;
-    while(BufferIteration_NextBuffer(&iter))
-    {
-        if(iter.phase != 1)
-            continue;
-        printf("Thread %lld:\n", iter.current_thread->ThreadID);
-        printf("  Call Nodes: %d\n", (int)iter.current_thread->NodeInfoArray.size());
-        node_counter += iter.current_thread->NodeInfoArray.size();
-        
-        
-        unsigned long long int tbl_sz = 0;
-        int i;
-        for(i = 1; i < iter.current_thread->NodeInfoArray.size(); i++)
-        {
-            tbl_sz += 0; //st_memsize(iter.current_thread->NodeInfoArray[i].children->tbl);
-        }
-        printf("  Table Size: %lld\n", tbl_sz);
-    }
-
-    
-	printf("[St]\n");
-    printf("  All Call Nodes: %lld\n", node_counter);
-    
-    //print_table();
-    return 0;
-}
-
-*/
-
 
 
 
