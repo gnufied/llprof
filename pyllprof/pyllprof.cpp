@@ -58,7 +58,6 @@ const char *python_name_func(nameid_t nameid, void *p)
     Py_UNICODE* wstr = PyUnicode_AS_UNICODE(f_code->co_name);
     
     char *name = wstr_to_str(wstr);
-    cout << "Called:" << name << endl;
     return name;
 
 }
