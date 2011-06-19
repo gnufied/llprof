@@ -1,11 +1,12 @@
 
 #include <iostream>
-#include <ruby/ruby.h>
 #include "server.h"
 #include "llprof_const.h"
 
 #include <assert.h>
-#include <string.h>
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
 #include "platforms.h"
 #include "call_tree.h"
 #include "class_table.h"

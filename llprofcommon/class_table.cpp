@@ -39,7 +39,7 @@ void NameTable::AddCB(nameid_t key, void *data_ptr)
     map<nameid_t, const char *>::iterator it = table_.find(key);
     if(it == table_.end())
     {
-        const char *ns = new_str(llprof_call_name_func(data_ptr));
+        const char *ns = new_str(llprof_call_name_func(key, data_ptr));
         table_.insert(make_pair(key, ns));
     }
     //pthread_mutex_unlock(&mtx_);

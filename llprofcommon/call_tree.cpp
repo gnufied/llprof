@@ -11,7 +11,7 @@
 #include <map>
 
 #include "platforms.h"
-
+#include "server.h"
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
@@ -30,17 +30,17 @@ int gDefaultSerializedStackInfoSize = 512;
 
 
 
-static const char * (*g_name_func)(void *);
-void llprof_set_name_func(const char * cb(void *))
+static const char * (*g_name_func)(nameid_t, void *);
+void llprof_set_name_func(const char * cb(nameid_t, void *))
 {
     g_name_func = cb;
 }
 
 #define NOW_TIME     ((*g_gettime_func)())
 
-const char *llprof_call_name_func(void *p)
+const char *llprof_call_name_func(nameid_t id, void *p)
 {
-    return (*g_name_func)(p);
+    return (*g_name_func)(id, p);
 }
 
 
@@ -474,6 +474,7 @@ void llprof_init()
     cout << "  pStack = " << gBackBuffer_SerializedStackArray << endl;
 
     get_current_thread();
+    start_server();
    
 }
 
