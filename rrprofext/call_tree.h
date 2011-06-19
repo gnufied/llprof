@@ -5,16 +5,19 @@
 #ifndef CALL_TREE_H
 #define CALL_TREE_H
 
-#include "rrprof.h"
-#include <ruby/ruby.h>
+#include "llprof_const.h"
 
-// モジュールの初期化時
-void CallTree_InitModule();
-// コールツリーデータの初期化
-void CallTree_Init();
 
-void CallTree_RegisterModeFunction();
-VALUE CallTree_PrintStat(VALUE self, VALUE obj);
+typedef long long int time_val_t;
+
+
+typedef struct
+{
+    const char *field_name;
+    int slide;
+} slide_record_t;
+
+
 void CallTree_GetSlide(slide_record_t **ret, int *nfield);
 
 struct ThreadIterator{
@@ -32,5 +35,16 @@ int BufferIteration_NextBuffer(ThreadIterator *iter);
 
 
 typedef unsigned long long nameid_t;
+
+
+void llprof_set_name_func(const char * cb(void *data_ptr));
+void llprof_set_time_func(time_val_t (*cb)());
+
+const char *llprof_call_name_func(void *p);
+
+void llprof_call_handler(nameid_t nameid, void *name_info);
+void llprof_return_handler();
+
+void llprof_init();
 
 #endif

@@ -2,12 +2,11 @@
 #include <iostream>
 #include <ruby/ruby.h>
 #include "server.h"
-#include "rrprof_const.h"
+#include "llprof_const.h"
 
 #include <assert.h>
 #include <string.h>
 #include "platforms.h"
-#include "rrprof.h"
 #include "call_tree.h"
 #include "class_table.h"
 
@@ -16,6 +15,12 @@ using namespace std;
 #ifdef _WIN32
 #   include <winsock2.h>
 #endif
+
+
+
+
+int gServerStartedFlag;
+
 
 pthread_t gServerThread;
 
@@ -107,17 +112,14 @@ void slide_info_to_str(char *str, int maxsz)
 
 void msg_handler(int sock, int msg_id, int size, char *msgbuf)
 {
-    // それぞれのメッセージの意味は > rrprof_const.h
+    // それぞれのメッセージの意味は llprof_const.h
     switch(msg_id)
     {
     case MSG_START_PROFILE:
         // SetProfileMode(StartProfile_GetProfileMode(msgbuf));
         gServerStartedFlag = 1;
         SendMessage(sock, MSG_COMMAND_SUCCEED, 0, 0);
-        while(!IsProgramRunning())
-        {
-            sleep(1);
-        }
+
         break;
     
     case MSG_QUERY_INFO:{

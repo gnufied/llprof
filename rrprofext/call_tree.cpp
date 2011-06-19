@@ -12,6 +12,10 @@
 
 #include "platforms.h"
 
+#include <cstring>
+#include <cstdlib>
+#include <cstdio>
+
 #include "call_tree.h"
 #include "class_table.h"
 
@@ -26,12 +30,28 @@ int gDefaultSerializedStackInfoSize = 512;
 
 
 
-struct MethodTable
+static const char * (*g_name_func)(void *);
+void llprof_set_name_func(const char * cb(void *))
 {
-	st_table *tbl;
-};
+    g_name_func = cb;
+}
+
+#define NOW_TIME     ((*g_gettime_func)())
+
+const char *llprof_call_name_func(void *p)
+{
+    return (*g_name_func)(p);
+}
 
 
+static time_val_t (*g_gettime_func)();
+void llprof_set_time_func(time_val_t (*cb)())
+{
+    g_gettime_func = cb;
+}
+
+
+typedef map<nameid_t, unsigned int> children_t;
 struct MethodNodeInfo
 {
     unsigned int serialized_node_index;
@@ -39,7 +59,7 @@ struct MethodNodeInfo
     
     nameid_t nameid;
 
-	MethodTable *children;
+	children_t *children;
     time_val_t start_time;
 	unsigned int parent_node_id;
 };
@@ -62,8 +82,11 @@ struct StackInfo
 };
 
 
-
-
+#define ADD_SLIDE(struct_field, field_name_str)     { \
+    slides[slide_idx].field_name = field_name_str; \
+    slides[slide_idx].slide = (int)((unsigned long long int)&test.struct_field - (unsigned long long int)&test); \
+    slide_idx++; \
+}
 
 void CallTree_GetSlide(slide_record_t **ret, int *nfield)
 {
@@ -209,51 +232,6 @@ vector<StackInfo>* gBackBuffer_SerializedStackArray;
 
 
 
-int mtbl_hash_type_cmp(nameid_t *a, nameid_t *b) 
-{
-    return (*a != *b);
-}
-
-int mtbl_hash_type_hash(nameid_t *key) 
-{
-   return *key;
-}
-
-struct st_hash_type mtbl_hash_type = {
-    (int (*)(...)) mtbl_hash_type_cmp,
-    (st_index_t (*)(...)) mtbl_hash_type_hash
-};
-
-
-
-MethodTable* MethodTableCreate();
-
-unsigned int MethodTableLookup(MethodTable *mtbl, nameid_t nameid);
-
-
-MethodTable* MethodTableCreate()
-{
-	MethodTable* mtbl = ALLOC(MethodTable);
-	mtbl->tbl = st_init_table(&mtbl_hash_type);
-	return mtbl;
-}
-
-unsigned int MethodTableLookup(MethodTable *mtbl, nameid_t nameid)
-{
-	void *ret;
-	nameid_t key = nameid;
-
-	if(!st_lookup(mtbl->tbl, (st_data_t)&key, (st_data_t *)&ret))
-	{
-		return 0;
-	}
-    return 
-        static_cast<unsigned int>(
-            reinterpret_cast<unsigned long long int>(ret)
-        );
-
-}
-
 
 static MethodNodeSerializedInfo *GetSerializedNodeInfo(unsigned int call_node_id);
 static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id);
@@ -267,26 +245,6 @@ T *new_tail_elem(vector<T> &arr)
     return &arr[arr.size() - 1];
 }
 
-#ifdef DEBUG_NAMEMAP
-
-map<unsigned long long, nameid_t> g_namemap;
-unsigned long long toLong(unsigned int nid, nameid_t nameid)
-{
-    return ((unsigned long long)nid << 48) + (unsigned long long)nameid;
-}
-
-int viz_table_print(nameid_t *key, unsigned long long id, st_data_t data)
-{
-    cout << "  - " << *key << " ID:" << id << endl;
-    return ST_CONTINUE;
-}
-
-void viz_table(st_table *tbl)
-{
-    st_foreach(tbl, (int (*)(...))viz_table_print, NULL);
-}
-
-#endif
 
 unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_data_ptr)
 {
@@ -296,37 +254,13 @@ unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_
     
     
     
-    unsigned int id = MethodTableLookup(node_info->children, nameid);
-	if(id == 0)
+    children_t::iterator iter = node_info->children->find(nameid);
+    
+	if(iter == node_info->children->end())
 	{
-		id = ti->AddCallNode(parent_id, nameid, name_data_ptr);
-#ifdef DEBUG_NAMEMAP
-        cout << "[New] ";
+		return ti->AddCallNode(parent_id, nameid, name_data_ptr);
     }
-    else
-    {
-        cout << "      ";
-#endif
-    }
-#ifdef DEBUG_NAMEMAP
-    cout << "P-ID:" << parent_id << " NameID:" << nameid << " id:" << id << " tbl:" << (void *)node_info->children->tbl << endl;
-    viz_table(node_info->children->tbl);
-
-    map<unsigned long long, nameid_t>::iterator it = g_namemap.find(toLong(parent_id, nameid));
-    if(it == g_namemap.end())
-    {
-        g_namemap.insert(make_pair(toLong(parent_id, nameid), id));
-    }
-    else
-    {
-        if(((*it).second) != id)
-        {
-            cout << "Error!! Prev:" << (*it).second << endl;
-            assert(false);
-        }
-    }        
-#endif
-	return id;
+	return (*iter).second;
 }
 
 
@@ -383,22 +317,6 @@ static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id)
 }
 
 
-const char *GetNameFromNameInfo(void *name_info_ptr)
-{
-    if(!name_info_ptr)
-        return "(null)";
-    struct ruby_name_info_t{
-        VALUE klass;
-        ID id;
-    };
-    
-    stringstream s;
-    
-    s << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass);
-    s << "::";
-    s << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
-    return s.str().c_str();
-}
 
 unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, nameid_t nameid, void *name_info_ptr)
 {
@@ -406,57 +324,31 @@ unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, nameid_t namei
     call_node->serialized_node_index = 0;
     call_node->generation_number = 0;
     call_node->nameid = nameid;
-    call_node->children = MethodTableCreate();
+    call_node->children = new children_t();
     
-    GetNameIDTable()->AddCB(nameid, GetNameFromNameInfo, name_info_ptr);
+    GetNameIDTable()->AddCB(nameid, name_info_ptr);
     
     call_node->parent_node_id = parent_node_id;
     if(parent_node_id != 0)
     {
-        st_insert(
-            GetNodeInfo(parent_node_id)->children->tbl,
-            (st_data_t)new nameid_t(call_node->nameid), // call_nodeはvector上にあるので、動く可能性がある
-            (st_data_t)(NodeInfoArray.size() - 1)
-        );
+        GetNodeInfo(parent_node_id)->children->insert(make_pair(call_node->nameid, NodeInfoArray.size() - 1));
     }
 
     return NodeInfoArray.size() - 1;
 }
 
 
-nameid_t RubyNameInfoToNameID(VALUE klass, ID id)
-{
-    return (unsigned long long)klass * (unsigned long long)id;
-}
 
-void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
+
+void llprof_call_handler(nameid_t nameid, void *name_info)
 {
     ThreadInfo* ti = CURRENT_THREAD;
 
-	if(ti->stop)
-	{
-		return;
-	}
+	assert(ti->stop == 0);
 	ti->stop = 1;
-    
-    struct{
-        VALUE klass;
-        ID id;
-    } ruby_name_info;
-    if(event == RUBY_EVENT_C_CALL)
-    {
-        ruby_name_info.id = p_id;
-        ruby_name_info.klass = p_klass;
-    }
-    else
-    {
-        rb_frame_method_id_and_class(&ruby_name_info.id, &ruby_name_info.klass);
-    }
-    
-    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
 
     unsigned int before = ti->CurrentCallNodeID;
-    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, nameid, &ruby_name_info);
+    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, nameid, name_info);
     
     MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
     MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
@@ -471,14 +363,11 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     pthread_mutex_unlock(&ti->StackMutex);
 
 	ti->stop = 0;
-
 }
 
 
-void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
+void llprof_return_handler()
 {
-    
-
     ThreadInfo* ti = CURRENT_THREAD;
     // Rubyのバグ？
     // rrprofのrequire終了時にも呼ばれる(バージョンがある)ようなのでスキップ
@@ -488,24 +377,8 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
         return;
     }
     
-	if(ti->stop) return;
+	assert(ti->stop == 0);
 	ti->stop = 1;
-
-    /*
-	ID id;
-	VALUE klass;
-    if(event == RUBY_EVENT_C_RETURN)
-    {
-        id = p_id;
-        klass = p_klass;
-    }
-    else
-    {
-        rb_frame_method_id_and_class(&id, &klass);
-    }
-
-    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
-    */
 
     MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
     MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
@@ -526,17 +399,6 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 }
 
 
-void CallTree_RegisterModeFunction()
-{
-    
-	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
-	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
-    
-	//rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL, Qnil);
-	//rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN, Qnil);
-}
-
-
 void print_tree(unsigned int id, int indent);
 
 
@@ -546,17 +408,15 @@ typedef struct
 } print_tree_prm_t;
 
 
-
+/*
 void print_tree_st(MethodNodeInfo *key, unsigned int id, st_data_t data)
 {
 	print_tree_prm_t *prm = (print_tree_prm_t *)data;
 	print_tree(id, prm->indent);
 }
-
 void print_tree(unsigned int id, int indent)
 {
     assert(0);
-    /*
     ThreadInfo* ti = CURRENT_THREAD;
     MethodNodeInfo *info = &ti->NodeInfoArray[id];
 	MethodNodeSerializedInfo *sinfo = &(*ti->SerializedNodeInfoArray)[id];
@@ -571,14 +431,12 @@ void print_tree(unsigned int id, int indent)
 	print_tree_prm_t prm;
 	prm.indent = indent + 2;
 	st_foreach(info->children->tbl, (int (*)(...))print_tree_st, (st_data_t)&prm);
-    */
 }
 
 
 void print_table()
 {
     assert(0);
-    /*
     ThreadInfo *ti = CURRENT_THREAD;
     printf("%8s %16s %24s %8s %12s %16s %16s\n", "id", "class", "name", "p-id", "count", "all-t", "self-t");
 	int i = 1;
@@ -600,47 +458,15 @@ void print_table()
         );
 
 	}
-    */
 }
 
-VALUE CallTree_PrintStat(VALUE self, VALUE obj)
+*/
+
+void llprof_init()
 {
-	
-	printf("[All threads]\n");
-    ThreadIterator iter;
-    BufferIteration_Initialize(&iter);
-    unsigned long long int node_counter = 0;
-    while(BufferIteration_NextBuffer(&iter))
-    {
-        if(iter.phase != 1)
-            continue;
-        printf("Thread %lld:\n", iter.current_thread->ThreadID);
-        printf("  Call Nodes: %d\n", (int)iter.current_thread->NodeInfoArray.size());
-        node_counter += iter.current_thread->NodeInfoArray.size();
-        
-        
-        unsigned long long int tbl_sz = 0;
-        int i;
-        for(i = 1; i < iter.current_thread->NodeInfoArray.size(); i++)
-        {
-            tbl_sz += st_memsize(iter.current_thread->NodeInfoArray[i].children->tbl);
-        }
-        printf("  Table Size: %lld\n", tbl_sz);
-    }
+    pthread_mutex_init(&gThreadDataMutex, NULL);
+    pthread_key_create(&gCurrentThreadKey, NULL);
 
-    
-	printf("[St]\n");
-    printf("  All Call Nodes: %lld\n", node_counter);
-    
-    //print_table();
-    return 0;
-}
-
-
-#define PRINTSIZEOF(tid)    {printf("Sizeof %s: %d\n", #tid, sizeof(tid));}
-
-void CallTree_Init()
-{
     gBackBuffer_SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
     gBackBuffer_SerializedStackArray = new vector<StackInfo>();
 
@@ -649,17 +475,6 @@ void CallTree_Init()
 
     get_current_thread();
    
-
-    #ifdef PRINT_DEBUG
-    PRINTSIZEOF(MethodNodeInfo);
-    PRINTSIZEOF(MethodNodeSerializedInfo);
-    #endif
-}
-
-void CallTree_InitModule()
-{
-    pthread_mutex_init(&gThreadDataMutex, NULL);
-    pthread_key_create(&gCurrentThreadKey, NULL);
 }
 
 

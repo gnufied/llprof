@@ -5,6 +5,8 @@ using namespace std;
 #include "platforms.h"
 #include "class_table.h"
 
+#include <cstring>
+
 NameTable gNameIDTbl;
 
 NameTable *GetNameIDTable()
@@ -12,28 +14,12 @@ NameTable *GetNameIDTable()
     return &gNameIDTbl;
 }
 
-int clstbl_cmp(nameid_t a, nameid_t b) 
-{
-    return (a != b);
-}
-
-int clstbl_hash(nameid_t key)
-{
-    int hval = *reinterpret_cast<int *>(&key);
-    return hval;
-}
-
-struct st_hash_type clstbl_hash_type = {
-    (int (*)(...))clstbl_cmp,
-    (st_index_t (*)(...)) clstbl_hash
-};
-
 const char *nullstr = "(null)";
 const char *new_str(const char *str)
 {
     if(!str)
         return nullstr;
-    char *new_buf = (char *)malloc(strlen(str)+1);
+    char *new_buf = new char[strlen(str)+1];
     strcpy(new_buf, str);
     return new_buf;
 }
@@ -41,43 +27,36 @@ const char *new_str(const char *str)
 NameTable::NameTable()
 {
     pthread_mutex_init(&mtx_, NULL);
-    table_ = st_init_table(&clstbl_hash_type);
-    cout << "Name Table Initialized: " << (void *)table_ << endl;
 }
 
 
 // value: rb_class2name(klass)
-void NameTable::AddCB(nameid_t key, const char * cb(void *key), void *data_ptr)
+void NameTable::AddCB(nameid_t key, void *data_ptr)
 {
     char *name;
-    pthread_mutex_lock(&mtx_);
-	if(!st_lookup(table_, (st_data_t)key, (st_data_t *)&name))
-	{
-        const char *ns = new_str(cb(data_ptr));
-        // printf("Add Class : %s\n", ns);
-		st_insert(
-            table_,
-            (st_data_t)key,
-            (st_data_t)ns
-        );
-        pthread_mutex_unlock(&mtx_);
-	}
-    pthread_mutex_unlock(&mtx_);
+    //pthread_mutex_lock(&mtx_);
+    
+    map<nameid_t, const char *>::iterator it = table_.find(key);
+    if(it == table_.end())
+    {
+        const char *ns = new_str(llprof_call_name_func(data_ptr));
+        table_.insert(make_pair(key, ns));
+    }
+    //pthread_mutex_unlock(&mtx_);
 }
 
 const char *null_str = "(ERR)";
 const char * NameTable::Get(nameid_t entry)
 {
-    char *name;
-    pthread_mutex_lock(&mtx_);
-	if(!st_lookup(table_, (st_data_t)entry, (st_data_t *)&name))
-	{
-        pthread_mutex_unlock(&mtx_);
+    //pthread_mutex_lock(&mtx_);
+    map<nameid_t, const char *>::iterator it = table_.find(entry);
+    if(it == table_.end())
+    {
+        //pthread_mutex_unlock(&mtx_);
         return null_str;
-        //return NULL;
-	}
-    pthread_mutex_unlock(&mtx_);
-    return name;
+    }
+    //pthread_mutex_unlock(&mtx_);
+    return (*it).second;
 }
 
 

@@ -9,19 +9,9 @@
 #include "rrprof.h"
 #include "call_tree.h"
 #include "server.h"
-
-
-
-#define POLLFD_MAX	256
-
-
-int gProgramStartedFlag;
-int gServerStartedFlag;
-
-int IsProgramRunning()
-{
-    return gProgramStartedFlag;
-}
+#include <iostream>
+#include <sstream>
+using namespace std;
 
 void rp_assert_failure(char *expr)
 {
@@ -79,13 +69,13 @@ time_val_t GetNowTime()
 time_val_t gTimerCounter = 0;
 #endif
 
-static VALUE
+/*static VALUE
 print_stat(VALUE self, VALUE obj)
 {
     CallTree_PrintStat(self, obj);
     return NULL;
 }
-
+*/
 
 void
 print_test(rb_event_flag_t event, VALUE data, VALUE self, ID _d_id, VALUE _d_klass)
@@ -146,53 +136,89 @@ void start_timer_thread()
 }
 #endif
 
+
+struct ruby_name_info_t{
+    VALUE klass;
+    ID id;
+};
+
+const char *rrprof_name_func(void *name_info_ptr)
+{
+    if(!name_info_ptr)
+        return "(null)";
+
+    stringstream s;
+    
+    s << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass);
+    s << "::";
+    s << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
+    return s.str().c_str();
+}
+
+inline nameid_t RubyNameInfoToNameID(VALUE klass, ID id)
+{
+    return (unsigned long long)klass * (unsigned long long)id;
+}
+
+void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
+{
+    ruby_name_info_t ruby_name_info;
+    if(event == RUBY_EVENT_C_CALL)
+    {
+        ruby_name_info.id = p_id;
+        ruby_name_info.klass = p_klass;
+    }
+    else
+    {
+        rb_frame_method_id_and_class(&ruby_name_info.id, &ruby_name_info.klass);
+    }
+    
+    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
+
+    llprof_call_handler(nameid, (void *)&ruby_name_info);
+}
+
+
+
+
+void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
+{
+    llprof_return_handler();
+}
+
+
+
+
+
+
+
 extern "C"
 void Init_rrprof(void)
 {
-    gProgramStartedFlag = 0;
 
     #ifdef PRINT_FLAGS
         print_option_flags();
     #endif
 
-    CallTree_InitModule();
+    llprof_set_time_func(GetNowTime_clock_gettime_monotonic);
+    llprof_set_name_func(rrprof_name_func);
+    llprof_init();
+    
 
     #ifdef TIMERMODE_TIMERTHREAD
-    start_timer_thread();
+        start_timer_thread();
     #endif
     start_server();
-    char *susp_mode = getenv("RRPROF_SUSPEND");
-    if(susp_mode && !strcmp(susp_mode, "1"))
-    {
-        #ifdef PRINT_DEBUG
-        printf("Suspend\n");
-        #endif
-        for(;;)
-        {
-            sleep(1);
-            if(gServerStartedFlag != 0)
-            {
-                sleep(1);
-                break;
-            }
-        }
-    }
-    #ifdef PRINT_DEBUG
-	printf("Initializing rrprof...\n");
-    #endif
-
 	VALUE rrprof_mod = rb_define_module("RRProf");
-    rb_define_module_function(rrprof_mod, "print_stat", (VALUE (*)(...))print_stat, 0);
+    // rb_define_module_function(rrprof_mod, "print_stat", (VALUE (*)(...))print_stat, 0);
+
+    
+	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
+	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
 
 
-    CallTree_Init();
-    CallTree_RegisterModeFunction();
-    #ifdef PRINT_DEBUG
-	printf("Start program\n");
-    #endif
 
     atexit (rrprof_exit);
-    gProgramStartedFlag = 1;
 
 }
 
@@ -205,7 +231,7 @@ void rrprof_exit (void)
     if(ep_mode && !strcmp(ep_mode, "1"))
     {
         printf("[rrprof exit]\n");
-        print_stat(Qnil, Qnil);
+        //print_stat(Qnil, Qnil);
     }
 }
 
@@ -227,6 +253,43 @@ void HexDump(char *buf, int size)
     printf("\n");
 }
 
+
+
+/*
+VALUE CallTree_PrintStat(VALUE self, VALUE obj)
+{
+	
+	printf("[All threads]\n");
+    ThreadIterator iter;
+    BufferIteration_Initialize(&iter);
+    unsigned long long int node_counter = 0;
+    while(BufferIteration_NextBuffer(&iter))
+    {
+        if(iter.phase != 1)
+            continue;
+        printf("Thread %lld:\n", iter.current_thread->ThreadID);
+        printf("  Call Nodes: %d\n", (int)iter.current_thread->NodeInfoArray.size());
+        node_counter += iter.current_thread->NodeInfoArray.size();
+        
+        
+        unsigned long long int tbl_sz = 0;
+        int i;
+        for(i = 1; i < iter.current_thread->NodeInfoArray.size(); i++)
+        {
+            tbl_sz += 0; //st_memsize(iter.current_thread->NodeInfoArray[i].children->tbl);
+        }
+        printf("  Table Size: %lld\n", tbl_sz);
+    }
+
+    
+	printf("[St]\n");
+    printf("  All Call Nodes: %lld\n", node_counter);
+    
+    //print_table();
+    return 0;
+}
+
+*/
 
 
 
