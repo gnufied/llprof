@@ -193,21 +193,41 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
         
        public void addRecordChild(DataStore.AbstractRecord arec) {
     	   DataStore.Record rec = (DataStore.Record)arec;
-          	rec.addRecordEventListener(this);
-           	if(listeners.isEmpty())
-           			return;
-           	LinkedList inserted_list;
-           	inserted_list = new LinkedList();
-           	for(DataStore.Record i = rec; i != null; i = i.getParent()){
-           			inserted_list.addFirst(i);
-           		}
-           	int idxes[] = {rec.getParent().childIndex(rec)};
-           	Object children[] = {rec};
-           	TreeModelEvent event = new TreeModelEvent(this, inserted_list.toArray(), idxes, children);
-           	for(TreeModelListener l: listeners) {
-           		l.treeNodesInserted(event);
-           		}
-        }
+    	   rec.addRecordEventListener(this);
+    	   if(listeners.isEmpty())
+   				return;
+    	   LinkedList inserted_list;
+    	   inserted_list = new LinkedList();
+    	   for(DataStore.Record i = rec; i != null; i = i.getParent()){
+   				inserted_list.addFirst(i);
+   			}
+    	   int idxes[] = {rec.getParent().childIndex(rec)};
+    	   Object children[] = {rec};
+    	   TreeModelEvent event = new TreeModelEvent(this, inserted_list.toArray(), idxes, children);
+    	   for(TreeModelListener l: listeners) {
+    		   l.treeNodesInserted(event);
+    	   }
+    	   
+		   System.out.print(":: Add [");
+		   System.out.print(inserted_list.size());
+		   System.out.print("] ");		   
+		   for(Object ro: inserted_list)
+    	   {
+    		   DataStore.Record r = (DataStore.Record)ro;
+    		   System.out.print("->");
+    		   if(r.getCallName() != null)
+    		   {
+	    		   System.out.print(r.getTargetName());
+	    		   System.out.print("(");
+	    		   System.out.print(r.getCallName().nameid);
+	    		   System.out.print(")");
+    		   }
+    		   else{
+	    		   System.out.print("[!]");
+    		   }
+    	   }
+    	   System.out.println();
+       }
 
 	   public void reload()
 	   {

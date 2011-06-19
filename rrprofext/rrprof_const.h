@@ -51,9 +51,7 @@
 // 名前の参照要求
 #define MSG_QUERY_NAMES           7
 // シンボルID->名前
-#define QUERY_NAMES_SYMBOL    1
-// クラスID->名前
-#define QUERY_NAMES_CLASS    2
+#define QUERY_NAMES    1
 // 名前の返答
 #define MSG_NAMES               8
 

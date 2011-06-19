@@ -17,8 +17,7 @@ class MessageTypes {
     public final static int MSG_COMMAND_SUCCEED = 100;
     public final static int MSG_ERROR = 101;
     
-    public final static int QUERY_NAMES_SYMBOL = 1;
-    public final static int QUERY_NAMES_CLASS = 2;
+    public final static int QUERY_NAMES = 1;
     
 }
 
@@ -317,54 +316,38 @@ class StackData extends StructArrayMessage {
 class QueryNames extends MessageBase {
 
 	int infoType;
-	ArrayList<Long> class_id_list;
-	ArrayList<Long> method_id_list;
+	ArrayList<Long> id_list;
 	public QueryNames()
     {
         messageType = MessageTypes.MSG_QUERY_NAMES;
-        class_id_list = new ArrayList<Long>();
-        method_id_list = new ArrayList<Long>();
+        id_list = new ArrayList<Long>();
     }
-    public void addMethodID(long mid)
+    public void addNameID(long nameid)
     {
-    	method_id_list.add(mid);
+    	id_list.add(nameid);
     }
-    public void addClassID(long mid)
+    public long getNameID(int idx)
     {
-    	class_id_list.add(mid);
+    	return id_list.get(idx);
     }
-    public long getMethodID(int idx)
-    {
-    	return method_id_list.get(idx);
-    }
-    public long getClassID(int idx)
-    {
-    	return class_id_list.get(idx);
-    }
-    public int numMethods(){return method_id_list.size();}
+    public int numMethods(){return id_list.size();}
     public int getMessageBodySize()
     {
-        return (method_id_list.size() + class_id_list.size()) * 8 + 16;
+        return (id_list.size()) * 8 + 16;
     }
     public void putMessageBody(ByteBuffer buf)
     {
-    	buf.putInt(MessageTypes.QUERY_NAMES_SYMBOL);
-    	buf.putInt(method_id_list.size());
-    	for(Long mid: method_id_list)
+    	buf.putInt(MessageTypes.QUERY_NAMES);
+    	buf.putInt(id_list.size());
+    	for(Long mid: id_list)
     	{
     		buf.putLong(mid);
-    	}
-    	buf.putInt(MessageTypes.QUERY_NAMES_CLASS);
-    	buf.putInt(class_id_list.size());
-    	for(Long cid: class_id_list)
-    	{
-    		buf.putLong(cid);
     	}
     }
     
     public int size()
     {
-    	return method_id_list.size() + class_id_list.size();
+    	return id_list.size();
     }
 }
 
@@ -391,20 +374,12 @@ class Names extends MessageBase {
 		query = q;
 	}
 	
-    public void mergeMethodTo(HashMap<Long, String> dest)
+    public void mergeNamesTo(HashMap<Long, String> dest)
     {
     	for(int i = 0; i < query.numMethods(); i++)
     	{
     		assert i < name_map.size();
-    		dest.put(query.getMethodID(i), name_map.get(i));
-    	}
-    }
-    public void mergeClassTo(HashMap<Long, String> dest)
-    {
-    	int nm = query.numMethods();
-    	for(int i = nm; i < name_map.size(); i++)
-    	{
-    		dest.put(query.getClassID(i-nm), name_map.get(i));
+    		dest.put(query.getNameID(i), name_map.get(i));
     	}
     }
 }

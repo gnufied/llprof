@@ -1,7 +1,29 @@
 package RRProf;
 import java.util.*;
 
-import javax.swing.event.TreeModelListener;
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.io.StringWriter;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerConfigurationException;
+import javax.xml.transform.TransformerException;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.TransformerFactoryConfigurationError;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Text;
+
 
 public class DataStore {
 
@@ -80,7 +102,7 @@ public class DataStore {
 
 		public Record()
 		{
-            children = new ArrayList<AbstractRecord>();
+			children = new ArrayList<AbstractRecord>();
 			ID = 0;
 			threadStore = null;
 			parent = null;
@@ -91,16 +113,41 @@ public class DataStore {
 			runningTime = 0;
 		}
 		
+		public void exportXML(Document doc, Element parent_elem) {
+			Element elem = doc.createElement("node");
+			if(callName != null) {
+				elem.setAttribute("cn", "1");
+				elem.setAttribute("id", Long.toString(ID));
+				elem.setAttribute("name", getTargetName());
+				elem.setAttribute("nameid", Long.toString(callName.nameid));
+				elem.setAttribute("allval", Long.toString(allTime));
+				elem.setAttribute("selfval", Long.toString(allTime - childrenTime));
+				elem.setAttribute("count", Long.toString(callCount));
+				
+				for(AbstractRecord arec: children)
+				{
+					Record rec = (Record)arec;
+					if(rec != null)
+						rec.exportXML(doc, elem);
+				}
+				
+			}
+			else {
+				elem.setAttribute("cn", "0");
+			}
+			parent_elem.appendChild(elem);
+		}
+		
 		public ThreadStore getThreadStore() {return threadStore;}
 		
 		public CallName getCallName(){return callName;}
 		
-		public String getTargetClassName(){
-			return getCallName().getClassName();
-		}
 		
-		public String getTargetMethodName(){
-			return getCallName().getMethodName();
+		public String getTargetName(){
+			if(getCallName() != null)
+				return getCallName().getName();
+			else
+				return "(null:j)";
 		}
 
 		
@@ -168,16 +215,14 @@ public class DataStore {
         		int p = getPercentage();
         		if(p == -1)
         			return String.format(
-        					"%s::%s %d" + qlabel,
-        					getCallName().getClassName(),
-        					getCallName().getMethodName(),
+        					"%s %d" + qlabel,
+        					getCallName().getName(),
         					getAllTime() / division
         				);
         		else
         			return String.format(
-        					"%s::%s %d"+qlabel+"(%d%%)", 
-        					getCallName().getClassName(),
-        					getCallName().getMethodName(),
+        					"%s %d"+qlabel+"(%d%%)", 
+        					getCallName().getName(),
         					getAllTime() / division,
         					getPercentage()
         				);
@@ -186,7 +231,7 @@ public class DataStore {
         
         public String getRecordName()
         {
-    		return String.format("%s::%s)", Long.toString(callName.classID), getTargetMethodName());
+    		return String.format("%s", getTargetName());
         }
         
        public Record getParent()
@@ -456,12 +501,8 @@ public class DataStore {
 			return getCallName().hashCode();
 		}
 
-		public String getTargetClass(){
-			return getCallName().getClassName();
-		}
-
-		public String getTargetMethodName(){
-			return getCallName().getMethodName();
+		public String getTargetName(){
+			return getCallName().getName();
 		}
 
 	}
@@ -520,35 +561,29 @@ public class DataStore {
 	
 	
 	public class CallName {
-		public CallName(long classID, long methodID)
+		public CallName(long nameid)
 		{
-			this.classID = classID;
-			this.methodID = methodID;
+			this.nameid = nameid;
 		}
-		public long classID;
-		public long methodID;
+		public long nameid;
 		public boolean equals(Object obj)
 		{
 			CallName cn = (CallName)obj;
 			if(cn == null)
 				return false;
-			return (this.classID == cn.classID && this.methodID == cn.methodID);
+			return (this.nameid == cn.nameid);
 		}
 		public int hashCode()
 		{
-			return (int)(this.methodID + this.classID);
+			return (int)(this.nameid);
 		}
         public String toString()
         {
-            return Long.toString(this.methodID) + "-" + Long.toString(this.methodID);
+            return Long.toString(this.nameid);
         }
         
-        public String getMethodName() {
-     	   return method_name_map.get(methodID);     	   
-        }
-        
-        public String getClassName() {
-        	return class_name_map.get(classID);
+        public String getName() {
+        	return name_id_map.get(nameid);
         }
 	}
 	
@@ -595,7 +630,16 @@ public class DataStore {
 	    public long getThreadID() {
 	    	return threadID;
 	    }
-
+	    
+	    public void exportXML(Document doc, Element elem) {
+	    	if(getRootRecord() != null) {
+	    		getRootRecord().exportXML(doc, elem);
+	    	}
+	    	else
+	    	{
+	    		System.out.println("Export Error: No root");
+	    	}
+	    }
 	}
 	
 	Set<EventListener> listeners;
@@ -611,8 +655,7 @@ public class DataStore {
 	Map<Long, ThreadStore> threadStores;
 	
 	Map<CallName, CallNameRecordSet > name_to_node;
-	Map<Long, String> method_name_map;
-	Map<Long, String> class_name_map;
+	Map<Long, String> name_id_map;
 	
     public DataStore()
     {
@@ -672,10 +715,9 @@ public class DataStore {
     	return getThreadStore(thread_id).getRootRecord();
     }
     
-    public void setNameMap(Map<Long, String> methods, Map<Long, String> classes)
+    public void setNameMap(Map<Long, String> map)
     {
-    	method_name_map = methods;
-    	class_name_map = classes;
+    	name_id_map = map;
     }
     
     public Record getNodeRecord(long thread_id, int cnid)
@@ -738,7 +780,7 @@ public class DataStore {
     	// 実行データの記録
 		for(int i = 0; i < data.numRecords(); i++)
 		{
-			CallName cnid = new CallName(data.getLong(i, "class"), data.getLong(i, "mid"));
+			CallName cnid = new CallName(data.getLong(i, "nameid"));
 			CallNameRecordSet rec_set;
 			if(!name_to_node.containsKey(cnid))
 			{
@@ -785,6 +827,45 @@ public class DataStore {
     public CallNameRecordSet getRecordOfCallName(CallName cn)
     {
     	return name_to_node.get(cn);
+    }
+    
+    public void exportXML(String filename)
+    {
+		DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+		DocumentBuilder db;
+		Document document = null;
+		try {
+			db = dbf.newDocumentBuilder();
+			document = db.newDocument();
+		} catch (ParserConfigurationException e) {
+			e.printStackTrace();
+		}
+		
+		Element root_elem = document.createElement("profile");
+		document.appendChild(root_elem);
+		for(Map.Entry<Long, ThreadStore> e : threadStores.entrySet()) {
+			Element thread_elem = document.createElement("thread");
+			thread_elem.setAttribute("ID", e.getKey().toString());
+			e.getValue().exportXML(document, thread_elem);
+			root_elem.appendChild(thread_elem);
+		}
+
+		File file = new File(filename);
+		PrintWriter pwriter;
+		try {
+			pwriter = new PrintWriter(new BufferedWriter(new FileWriter(file)));
+			TransformerFactory.newInstance().newTransformer()
+			                  .transform(new DOMSource(document),
+			                             new StreamResult(pwriter));
+		} catch (TransformerConfigurationException e1) {
+			e1.printStackTrace();
+		} catch (TransformerException e1) {
+			e1.printStackTrace();
+		} catch (TransformerFactoryConfigurationError e1) {
+			e1.printStackTrace();
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
     }
 }
 

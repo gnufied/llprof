@@ -8,12 +8,10 @@
 #include <ruby/ruby.h>
 
 #include "platforms.h"
-
+#include "call_tree.h"
 
 class NameTable
 {
-public:
-    typedef unsigned long long Key;
 
 private:
     pthread_mutex_t mtx_;
@@ -22,13 +20,13 @@ private:
 public:
     NameTable();
 
-    void AddCB(Key key, const char * cb(Key key));
-    const char *Get(Key key);
+    void AddCB(nameid_t key, const char * cb(void *data_ptr), void *data_ptr);
+
+    const char *Get(nameid_t key);
 
 };
 
-NameTable *GetMethodNameTable();
-NameTable *GetClassNameTable();
+NameTable *GetNameIDTable();
 
 
 #endif

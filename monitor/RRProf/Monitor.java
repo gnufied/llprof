@@ -30,8 +30,7 @@ class Monitor {
 	
     DataStore dataStore;
 	SlideInfo slide_info;
-	HashMap<Long, String> method_name_map;
-	HashMap<Long, String> class_name_map;
+	HashMap<Long, String> name_id_map_;
 	ProfileData currentProfileData;
 
     long allTime;
@@ -40,9 +39,8 @@ class Monitor {
 	Monitor()
 	{
         dataStore = new DataStore();
-		method_name_map = new HashMap<Long, String>();
-		class_name_map = new HashMap<Long, String>();
-		dataStore.setNameMap(method_name_map, class_name_map);
+		name_id_map_ = new HashMap<Long, String>();
+		dataStore.setNameMap(name_id_map_);
 		allTime = 0;
 		allCount = 0;
 		inputSize = 0;
@@ -170,10 +168,9 @@ class Monitor {
 		       QueryNames current_query = null;
 		       for(int i = 0; i < pdata.numRecords(); i++)
 		        {
-		        	long cls = pdata.getLong(i, "class");
-		        	long mid = pdata.getLong(i, "mid");
+		        	long nameid = pdata.getLong(i, "nameid");
 		        	
-		        	if(!method_name_map.containsKey(mid) || !class_name_map.containsKey(cls))
+		        	if(!name_id_map_.containsKey(nameid))
 		        	{
 		        		if(query_names_list == null)
 		        		{
@@ -184,15 +181,10 @@ class Monitor {
 		        			current_query = new QueryNames();
 		        			query_names_list.add(current_query);
 		        		}
-		        		if(!method_name_map.containsKey(mid))
+		        		if(!name_id_map_.containsKey(nameid))
 		        		{
-		        			method_name_map.put(mid, "<Asking>");
-		        			current_query.addMethodID(mid);
-		        		}
-		        		if(!class_name_map.containsKey(cls))
-		        		{
-		        			class_name_map.put(cls, "<Asking>");
-		        			current_query.addClassID(cls);
+		        			name_id_map_.put(nameid, "<Asking>");
+		        			current_query.addNameID(nameid);
 		        		}
 		        		
 		        		if(current_query.size() > 1000)
@@ -223,8 +215,7 @@ class Monitor {
 	    	   MessageBase msg = sendRequestAndReceiveResponse(q);
 	    	   Names names = (Names)msg;
 	    	   names.setQueryInfo(q);
-	    	   names.mergeMethodTo(method_name_map);
-	    	   names.mergeClassTo(class_name_map);
+	    	   names.mergeNamesTo(name_id_map_);
     	   }
        }
        currentProfileData = null;
@@ -233,9 +224,9 @@ class Monitor {
        }
     	return ret;
     }
-    public String getMethodName(long mid)
+    public String getNameFromID(long nameid)
     {
-    	return method_name_map.get(mid);
+    	return name_id_map_.get(nameid);
     }
 
     public void printProfileData()
@@ -257,8 +248,8 @@ class Monitor {
 			if(i < 0) continue;
 			System.out.printf(
 						"%10x %24s %12d %12d %12d",
-						currentProfileData.getLong(i, "class"),
-						getMethodName(currentProfileData.getLong(i, "mid")),
+						currentProfileData.getLong(i, "nameid"),
+						getNameFromID(currentProfileData.getLong(i, "nameid")),
 						currentProfileData.getLong(i, "all_time"),
 						currentProfileData.getLong(i, "children_time"),
 						currentProfileData.getLong(i, "call_count")

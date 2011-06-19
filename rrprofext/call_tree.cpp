@@ -4,13 +4,13 @@
 #include <time.h>
 #include <errno.h>
 
+#include <string>
 #include <iostream>
 #include <vector>
-
+#include <sstream>
 
 #include "platforms.h"
 
-#include "rrprof.h"
 #include "call_tree.h"
 #include "class_table.h"
 
@@ -36,22 +36,16 @@ struct MethodNodeInfo
     unsigned int serialized_node_index;
     unsigned int generation_number;
     
-	ID mid;
-	VALUE klass;
-	const char *mid_str;
-	const char *klass_str;
+    nameid_t nameid;
 
-    struct CallTreeNodeKey *st_table_key;
 	MethodTable *children;
     time_val_t start_time;
 	unsigned int parent_node_id;
 };
 
-#pragma pack(4)
 struct MethodNodeSerializedInfo
 {
-	ID mid;
-	VALUE klass;
+    nameid_t nameid;
     unsigned int call_node_id;
 	unsigned int parent_node_id;
 	time_val_t all_time;
@@ -59,16 +53,14 @@ struct MethodNodeSerializedInfo
 	unsigned long long int call_count;
 
 };
-#pragma pack()
 
-
-#pragma pack(4)
 struct StackInfo
 {
     int node_id;
     time_val_t start_time;
 };
-#pragma pack()
+
+
 
 
 
@@ -79,8 +71,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
     {
         MethodNodeSerializedInfo test;
         
-        ADD_SLIDE(mid, "pdata.mid")
-        ADD_SLIDE(klass, "pdata.class")
+        ADD_SLIDE(nameid, "pdata.nameid")
         ADD_SLIDE(all_time, "pdata.all_time")
         ADD_SLIDE(children_time, "pdata.children_time")
         ADD_SLIDE(call_count, "pdata.call_count")
@@ -159,7 +150,7 @@ struct ThreadInfo
         // CallNodeSeq = 1;
         // ActualCallNodeSeq = 0;
         GenerationNumber = 1;
-        CurrentCallNodeID = AddCallNode(0, (ID)0, (VALUE)0);
+        CurrentCallNodeID = AddCallNode(0, 0, NULL);
 
         next = NULL;
 
@@ -168,7 +159,7 @@ struct ThreadInfo
         #endif
     }
 
-    unsigned int AddCallNode(unsigned int parent_node_id, ID mid, VALUE klass);
+    unsigned int AddCallNode(unsigned int parent_node_id, nameid_t nameid, void *name_data_ptr);
 
 
 };
@@ -216,20 +207,15 @@ vector<MethodNodeSerializedInfo>* gBackBuffer_SerializedNodeInfoArray;
 vector<StackInfo>* gBackBuffer_SerializedStackArray;
 
 
-struct CallTreeNodeKey{
-    ID mid;
-    VALUE klass;
-    int hashval;
-};
 
-int mtbl_hash_type_cmp(CallTreeNodeKey *a, CallTreeNodeKey *b) 
+int mtbl_hash_type_cmp(nameid_t *a, nameid_t *b) 
 {
-    return (a->klass != b->klass) || (a->mid != b->mid);
+    return (*a != *b);
 }
 
-int mtbl_hash_type_hash(CallTreeNodeKey *key) 
+int mtbl_hash_type_hash(nameid_t *key) 
 {
-   return key->hashval;
+   return *key;
 }
 
 struct st_hash_type mtbl_hash_type = {
@@ -240,8 +226,8 @@ struct st_hash_type mtbl_hash_type = {
 
 
 MethodTable* MethodTableCreate();
-void MethodKeyCalcHash(CallTreeNodeKey* info);
-unsigned int MethodTableLookup(MethodTable *mtbl, VALUE klass, ID mid);
+
+unsigned int MethodTableLookup(MethodTable *mtbl, nameid_t nameid);
 
 
 MethodTable* MethodTableCreate()
@@ -251,14 +237,10 @@ MethodTable* MethodTableCreate()
 	return mtbl;
 }
 
-unsigned int MethodTableLookup(MethodTable *mtbl, VALUE klass, ID mid)
+unsigned int MethodTableLookup(MethodTable *mtbl, nameid_t nameid)
 {
 	void *ret;
-	CallTreeNodeKey key;
-	key.klass = klass;
-	key.mid = mid;
-	MethodKeyCalcHash(&key);
-
+	nameid_t key = nameid;
 
 	if(!st_lookup(mtbl->tbl, (st_data_t)&key, (st_data_t *)&ret))
 	{
@@ -277,23 +259,6 @@ static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id);
 
 
 
-void MethodKeyCalcHash(CallTreeNodeKey* info)
-{
-	info->hashval = info->mid + info->klass;
-}
-CallTreeNodeKey* MethodKeyCreate(MethodNodeInfo *info)
-{
-    // 作り捨て
-    // ハッシュテーブルに保持するため。
-    // 高々コールノード数しか作成されない。
-    
-    CallTreeNodeKey *key = (CallTreeNodeKey *)malloc(sizeof(CallTreeNodeKey));
-    key->mid = info->mid;
-    key->klass = info->klass;
-	MethodKeyCalcHash(key);
-    return key;
-}
-
 template <class T>
 T *new_tail_elem(vector<T> &arr)
 {
@@ -302,16 +267,16 @@ T *new_tail_elem(vector<T> &arr)
 }
 
 
-unsigned int GetChildNodeID(unsigned int parent_id, ID mid, VALUE klass)
+unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_data_ptr)
 {
     ThreadInfo *ti = CURRENT_THREAD;
 
 	MethodNodeInfo *node_info = &ti->NodeInfoArray[parent_id];
     
-    unsigned int id = MethodTableLookup(node_info->children, klass, mid);
+    unsigned int id = MethodTableLookup(node_info->children, nameid);
 	if(id == 0)
 	{
-		id = ti->AddCallNode(parent_id, mid, klass);
+		id = ti->AddCallNode(parent_id, nameid, name_data_ptr);
 	}
     
 	return id;
@@ -330,8 +295,7 @@ void AddActualRecord(unsigned int cnid)
     
 	sinfo->call_node_id = cnid;
 	sinfo->parent_node_id = call_node->parent_node_id;
-	sinfo->mid = call_node->mid;
-	sinfo->klass = call_node->klass;
+	sinfo->nameid = call_node->nameid;
 	sinfo->all_time = 0;
     sinfo->children_time = 0;
     sinfo->call_count = 0;
@@ -372,35 +336,39 @@ static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id)
 }
 
 
-const char *GetRbClassName(NameTable::Key key)
+const char *GetNameFromNameInfo(void *name_info_ptr)
 {
-    return rb_class2name((VALUE)key);
+    if(!name_info_ptr)
+        return "(null)";
+    struct ruby_name_info_t{
+        VALUE klass;
+        ID id;
+    };
+    
+    stringstream s;
+    
+    s << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass);
+    s << "::";
+    s << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
+    return s.str().c_str();
 }
 
-const char *GetRbMethodName(NameTable::Key key)
-{
-    return rb_id2name((ID)key);
-}
-
-unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, ID mid, VALUE klass)
+unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, nameid_t nameid, void *name_info_ptr)
 {
     MethodNodeInfo *call_node = new_tail_elem(NodeInfoArray);
     call_node->serialized_node_index = 0;
     call_node->generation_number = 0;
-    call_node->mid = mid;
-    call_node->klass = klass;
+    call_node->nameid = nameid;
     call_node->children = MethodTableCreate();
     
-    GetClassNameTable()->AddCB(klass, GetRbClassName);
-    GetMethodNameTable()->AddCB(mid, GetRbMethodName);
+    GetNameIDTable()->AddCB(nameid, GetNameFromNameInfo, name_info_ptr);
     
     call_node->parent_node_id = parent_node_id;
-    call_node->st_table_key = MethodKeyCreate(call_node);
     if(parent_node_id != 0)
     {
         st_insert(
             GetNodeInfo(parent_node_id)->children->tbl,
-            (st_data_t)call_node->st_table_key,
+            (st_data_t)&call_node->nameid,
             (st_data_t)(NodeInfoArray.size() - 1)
         );
     }
@@ -408,6 +376,11 @@ unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, ID mid, VALUE 
     return NodeInfoArray.size() - 1;
 }
 
+
+nameid_t RubyNameInfoToNameID(VALUE klass, ID id)
+{
+    return (unsigned long long)klass * (unsigned long long)id;
+}
 
 void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
 {
@@ -419,20 +392,24 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
 	}
 	ti->stop = 1;
     
-	ID id;
-	VALUE klass;
+    struct{
+        VALUE klass;
+        ID id;
+    } ruby_name_info;
     if(event == RUBY_EVENT_C_CALL)
     {
-        id = p_id;
-        klass = p_klass;
+        ruby_name_info.id = p_id;
+        ruby_name_info.klass = p_klass;
     }
     else
     {
-        rb_frame_method_id_and_class(&id, &klass);
+        rb_frame_method_id_and_class(&ruby_name_info.id, &ruby_name_info.klass);
     }
+    
+    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
 
     unsigned int before = ti->CurrentCallNodeID;
-    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, id, klass);
+    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, nameid, &ruby_name_info);
     
     MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
     MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
@@ -467,6 +444,7 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
 	if(ti->stop) return;
 	ti->stop = 1;
 
+    /*
 	ID id;
 	VALUE klass;
     if(event == RUBY_EVENT_C_RETURN)
@@ -478,6 +456,9 @@ void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID 
     {
         rb_frame_method_id_and_class(&id, &klass);
     }
+
+    nameid_t nameid = RubyNameInfoToNameID(ruby_name_info.klass, ruby_name_info.id);
+    */
 
     MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
     MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
@@ -527,6 +508,8 @@ void print_tree_st(MethodNodeInfo *key, unsigned int id, st_data_t data)
 
 void print_tree(unsigned int id, int indent)
 {
+    assert(0);
+    /*
     ThreadInfo* ti = CURRENT_THREAD;
     MethodNodeInfo *info = &ti->NodeInfoArray[id];
 	MethodNodeSerializedInfo *sinfo = &(*ti->SerializedNodeInfoArray)[id];
@@ -541,12 +524,14 @@ void print_tree(unsigned int id, int indent)
 	print_tree_prm_t prm;
 	prm.indent = indent + 2;
 	st_foreach(info->children->tbl, (int (*)(...))print_tree_st, (st_data_t)&prm);
-
+    */
 }
 
 
 void print_table()
 {
+    assert(0);
+    /*
     ThreadInfo *ti = CURRENT_THREAD;
     printf("%8s %16s %24s %8s %12s %16s %16s\n", "id", "class", "name", "p-id", "count", "all-t", "self-t");
 	int i = 1;
@@ -568,7 +553,7 @@ void print_table()
         );
 
 	}
-
+    */
 }
 
 VALUE CallTree_PrintStat(VALUE self, VALUE obj)

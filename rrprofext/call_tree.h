@@ -5,6 +5,7 @@
 #ifndef CALL_TREE_H
 #define CALL_TREE_H
 
+#include "rrprof.h"
 #include <ruby/ruby.h>
 
 // モジュールの初期化時
@@ -29,5 +30,7 @@ int BufferIteration_GetBufferType(ThreadIterator *iter);
 void BufferIteration_Initialize(ThreadIterator *iter);
 int BufferIteration_NextBuffer(ThreadIterator *iter);
 
+
+typedef unsigned long long nameid_t;
 
 #endif

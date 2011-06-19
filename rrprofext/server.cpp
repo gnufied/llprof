@@ -174,14 +174,8 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
                 continue;
             }
             const char *name = 0;
-            if(subsec_type == QUERY_NAMES_SYMBOL)
-                name = GetMethodNameTable()->Get(*(NameTable::Key *)(msgbuf+(8*i)));
-            else if(subsec_type == QUERY_NAMES_CLASS)
-            {
-                name = GetClassNameTable()->Get(*(NameTable::Key *)(msgbuf+(8*i)));
-
-                // cout << "   Res:" << name << endl;
-            }
+            if(subsec_type == QUERY_NAMES)
+                name = GetNameIDTable()->Get(*(nameid_t *)(msgbuf+(8*i)));
                 //name = rb_class2name(*(VALUE *)(msgbuf+(8*i)));
 //            printf("%d, %d: %lld => %s\n", subsec_type, i, *(unsigned long long *)(msgbuf+(8*i)), name);
             if(name != 0)

@@ -5,23 +5,19 @@ using namespace std;
 #include "platforms.h"
 #include "class_table.h"
 
-NameTable gMethodTbl, gClassTbl;
+NameTable gNameIDTbl;
 
-NameTable *GetMethodNameTable()
+NameTable *GetNameIDTable()
 {
-    return &gMethodTbl;
-}
-NameTable *GetClassNameTable()
-{
-    return &gClassTbl;
+    return &gNameIDTbl;
 }
 
-int clstbl_cmp(NameTable::Key a, NameTable::Key b) 
+int clstbl_cmp(nameid_t a, nameid_t b) 
 {
     return (a != b);
 }
 
-int clstbl_hash(NameTable::Key key)
+int clstbl_hash(nameid_t key)
 {
     int hval = *reinterpret_cast<int *>(&key);
     return hval;
@@ -51,13 +47,13 @@ NameTable::NameTable()
 
 
 // value: rb_class2name(klass)
-void NameTable::AddCB(Key key, const char * cb(Key key))
+void NameTable::AddCB(nameid_t key, const char * cb(void *key), void *data_ptr)
 {
     char *name;
     pthread_mutex_lock(&mtx_);
 	if(!st_lookup(table_, (st_data_t)key, (st_data_t *)&name))
 	{
-        const char *ns = new_str(cb(key));
+        const char *ns = new_str(cb(data_ptr));
         // printf("Add Class : %s\n", ns);
 		st_insert(
             table_,
@@ -70,7 +66,7 @@ void NameTable::AddCB(Key key, const char * cb(Key key))
 }
 
 const char *null_str = "(ERR)";
-const char * NameTable::Get(Key entry)
+const char * NameTable::Get(nameid_t entry)
 {
     char *name;
     pthread_mutex_lock(&mtx_);

@@ -94,6 +94,10 @@ public class MonitorGUI extends JFrame implements ActionListener {
 	        menuOpenHeavy.setMnemonic('H');
 	        menuOpenHeavy.addActionListener(this);
 	        menuFile.add(menuOpenHeavy);
+	        JMenuItem menuExportXML = new JMenuItem("Export XML");
+	        menuExportXML.setMnemonic('X');
+	        menuExportXML.addActionListener(this);
+	        menuFile.add(menuExportXML);
         getRootPane().setJMenuBar(menuBar);
         
         numRecordsField = addStatisticsField("numRecords", "Number of records", new Long(0));
@@ -130,7 +134,21 @@ public class MonitorGUI extends JFrame implements ActionListener {
         {
 			callTreeBrowser.openTree(CallTreeBrowserView.OTM_BOTTLENECK);
         }
-        
+		else if(e.getActionCommand() == "Export XML")
+        {
+		    JFileChooser filechooser = new JFileChooser();
+
+		    int selected = filechooser.showSaveDialog(this);
+		    if (selected == JFileChooser.APPROVE_OPTION){
+		      File file = filechooser.getSelectedFile();
+		      mon.getDataStore().exportXML(file.getName());
+		    }else if (selected == JFileChooser.CANCEL_OPTION){
+		    }else if (selected == JFileChooser.ERROR_OPTION){
+		    	System.out.println("Error: Open dialog");
+		    }
+			
+        }
+
 	}
 	
 	public void connect(String host, int port, int interval) {
