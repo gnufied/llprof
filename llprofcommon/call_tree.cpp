@@ -18,6 +18,7 @@
 
 #include "call_tree.h"
 #include "class_table.h"
+#include "record_type.h"
 
 using namespace std;
 
@@ -71,7 +72,6 @@ struct MethodNodeSerializedInfo
     unsigned int call_node_id;
 	unsigned int parent_node_id;
 	time_val_t all_time;
-	time_val_t children_time;
 	unsigned long long int call_count;
 
 };
@@ -97,7 +97,6 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
         
         ADD_SLIDE(nameid, "pdata.nameid")
         ADD_SLIDE(all_time, "pdata.all_time")
-        ADD_SLIDE(children_time, "pdata.children_time")
         ADD_SLIDE(call_count, "pdata.call_count")
         ADD_SLIDE(call_node_id, "pdata.call_node_id")
         ADD_SLIDE(parent_node_id, "pdata.parent_node_id")
@@ -270,7 +269,6 @@ void AddActualRecord(unsigned int cnid)
 	sinfo->parent_node_id = call_node->parent_node_id;
 	sinfo->nameid = call_node->nameid;
 	sinfo->all_time = 0;
-    sinfo->children_time = 0;
     sinfo->call_count = 0;
 
 

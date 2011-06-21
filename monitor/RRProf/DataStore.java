@@ -190,6 +190,7 @@ public class DataStore {
 			return callName;
 		}
 
+
 		public String getTargetName() {
 			if (getCallName() != null)
 				return getCallName().getName();
@@ -247,7 +248,7 @@ public class DataStore {
 		}
 
 		public String toString() {
-			return "Record";
+			return "R:" + getTargetName();
 		}
 
 		public String getLabelString(String qlabel, int division) {

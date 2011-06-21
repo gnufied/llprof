@@ -2,6 +2,7 @@
 #include "llprof.h"
 #include <string>
 #include <cstdlib>
+#include "record_type.h"
 using namespace std;
 
 bool g_aggressive_mode = true;

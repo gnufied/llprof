@@ -40,6 +40,9 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 		ThreadStore threadDataStore;
 		int index;
 		
+		ThreadStore getThreadStore() {
+			return threadDataStore;
+		}
 		public int getIndex() { return index; }
 		ThreadNode(ThreadStore thread_data_store, int idx) {
 			index = idx;
@@ -419,10 +422,37 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 	static final int OTM_BOTTLENECK = 2;
 
 	public void openTree(Record record){
-		
+		if(record == null)
+			return;
+		LinkedList path = new LinkedList();
+		while(record.getParent() != null) {
+			path.addFirst(record);
+			record = record.getParent();
+		}
+		RootNode tree_root = ((RootNode)model.getRoot());
+		int nThreads = tree_root.getChildCount();
+		for(int i = 0; i < nThreads; i++)
+		{
+			ThreadNode th_node = (ThreadNode)tree_root.getChild(i);
+			if(record.getThreadStore() == th_node.getThreadStore())
+			{
+				path.addFirst(th_node);
+				path.addFirst(tree_root);
+				openTree(new TreePath(path.toArray()));
+				return;
+			}
+		}
 	}
 
 	public void openTree(TreePath path){
+		System.out.print("Open: ");
+		for(int i = 0; i < path.getPath().length; i++){
+			System.out.print(path.getPath()[i].toString());
+			System.out.print(" > ");
+			
+		}
+		System.out.println("]");
+		
 		scrollPathToVisible(path);
 		setSelectionPath(path);
 	}

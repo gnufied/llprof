@@ -13,6 +13,8 @@ import javax.swing.JTabbedPane;
 import javax.swing.JTable;
 import javax.swing.JTextArea;
 
+import RRProf.DataStore.Record;
+
 
 public class MonitorBrowser extends JPanel {
 	public class StatisticField {
@@ -144,6 +146,13 @@ public class MonitorBrowser extends JPanel {
 		validate();
 		repaint();
 		System.out.println("Browser Reset");
+	}
+	
+	public void openRecordInTree(Record rec) {
+		if(rec != null) {
+			browserPane.setSelectedComponent(scrollCallTreeBrowser);
+			callTreeBrowser.openTree(rec);
+		}
 	}
 
 	public void writeLog(String s) {

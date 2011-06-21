@@ -231,11 +231,17 @@ public class SquaresView extends JPanel implements ChangeListener {
 				popup.add(item);
 				
 				popup.addSeparator();
+
 				item = new JMenuItem("Back to root");
 				item.addActionListener(this);
 				item.setActionCommand("backroot");
 				popup.add(item);
 
+				item = new JMenuItem("Show parent");
+				item.addActionListener(this);
+				item.setActionCommand("backparent");
+				popup.add(item);
+				
 				popup.show(e.getComponent(), e.getX(), e.getY());
 			}
 		}
@@ -245,15 +251,23 @@ public class SquaresView extends JPanel implements ChangeListener {
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			if(e.getActionCommand() == "setroot") {
-				rootRecord = selectedRecord;
-				setSelectedRecord(null);
+				setRootRecord(selectedRecord);
 			}
 			else if(e.getActionCommand() == "backroot") {
-				rootRecord = null;
-				setSelectedRecord(null);
+				setRootRecord(null);
+			}
+			else if(e.getActionCommand() == "backparent") {
+				if(rootRecord != null) {
+					if(rootRecord.getParent() == null) {
+						browser.writeLog("No more parent");
+					} else {
+						setRootRecord(rootRecord.getParent());
+					}
+					
+				}
 			}
 			else if(e.getActionCommand() == "opentree") {
-				browser.getCallTreeBrowser().openTree(selectedRecord);
+				browser.openRecordInTree(selectedRecord);
 			}
 		}
 	}
@@ -262,12 +276,20 @@ public class SquaresView extends JPanel implements ChangeListener {
 		selectedRecord = rec;
 		paintTo((Graphics2D)canvas.getGraphics(), selectedRecord);
 		if(selectedRecord != null)
-			selectedLabel.setText(selectedRecord.getPathString());
+			selectedLabel.setText(selectedRecord.getPathString(8));
 	}
 	
+	public void setRootRecord(Record rec) {
+		rootRecord = rec;
+		setSelectedRecord(null);
+		if(rootRecord != null)
+			rootLabel.setText(rootRecord.getPathString(8));
+	}
+
 	BufferedImage backbuf;
 	
 	public void paintTo(Graphics2D graphics, Record selected) {
+		
 		
 		if(backbuf == null || backbuf.getWidth() != canvas.getWidth() || backbuf.getHeight() != canvas.getHeight()) {
 			backbuf = new BufferedImage(canvas.getWidth(), canvas.getHeight(), BufferedImage.TYPE_INT_RGB);
