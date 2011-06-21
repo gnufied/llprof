@@ -488,9 +488,10 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 					long current_heavy_val = 0;
 					for(AbstractRecord rec: node.allChild())
 					{
-						if(rec.getAllTime() > current_heavy_val)
+						/// @todo index zero
+						if(rec.getAllValue(0) > current_heavy_val)
 						{
-							current_heavy_val = rec.getAllTime();
+							current_heavy_val = rec.getAllValue(0);
 							next = rec;
 						}
 					}

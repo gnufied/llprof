@@ -13,16 +13,10 @@ public class MethodBrowser extends RecordListView implements
 	Monitor mon;
 	MonitorBrowser main_gui;
 
-	public MethodBrowser(MonitorBrowser mgui) {
-		super();
+	MethodBrowser(MonitorBrowser mgui) {
+		super(null);
 		main_gui = mgui;
-		columns.add(this.COL_RUNNING_ICON);
-		columns.add(this.COL_NODENAME);
-		columns.add(this.COL_ALL_TIME);
-		columns.add(this.COL_SELF_TIME);
-		columns.add(this.COL_NUM_CALLS);
-		columns.add(this.COL_NUM_NODES);
-		updateColumn();
+
 		addMouseListener(this);
 	}
 
@@ -37,6 +31,17 @@ public class MethodBrowser extends RecordListView implements
 	public void setMonitor(Monitor m) {
 		mon = m;
 		mon.getDataStore().addEventListener(this);
+		setDataStore(mon.getDataStore());
+		columns.clear();
+		columns.add(COL_RUNNING_ICON);
+		columns.add(COL_NODENAME);
+		columns.add(COL_RECORD_ALL(0));
+		columns.add(COL_RECORD_SELF(0));
+		columns.add(COL_RECORD_ALL(1));
+		columns.add(COL_RECORD_SELF(1));
+		columns.add(COL_NUM_CALLS);
+		columns.add(COL_NUM_NODES);
+		updateColumn();
 	}
 
 	@Override

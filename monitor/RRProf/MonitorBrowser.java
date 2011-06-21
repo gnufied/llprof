@@ -160,7 +160,7 @@ public class MonitorBrowser extends JPanel {
 	}
 
 	public void openRecordSetView(DataStore.RecordSet recset) {
-		RecordSetViewer view = new RecordSetViewer(recset);
+		RecordSetViewer view = new RecordSetViewer(mon.getDataStore(), recset);
 		viewerPane.add("Method", view);
 	}
 
@@ -195,6 +195,7 @@ public class MonitorBrowser extends JPanel {
 		if(aggressive)
 		{
 			mon.startProfileAggressive();
+			methodBrowser.updateColumn();
 			return;
 		}
 		else{
@@ -212,6 +213,7 @@ public class MonitorBrowser extends JPanel {
 			}
 		}
 		repaint();
+		methodBrowser.updateColumn();
 	}
 	public void close() {
 		prepared = false;

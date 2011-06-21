@@ -137,6 +137,11 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
             string name = llprof_get_target_name();
             SendMessage(sock, MSG_PROFILE_TARGET, name.c_str(), name.length());
         }
+        else if(info_type == INFO_RECORD_METAINFO)
+        {
+            string value = llprof_get_record_info();
+            SendMessage(sock, MSG_RECORD_METAINFO, value.c_str(), value.length());
+        }
         break;
     }
     case MSG_REQ_PROFILE_DATA:{

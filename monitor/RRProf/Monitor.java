@@ -91,7 +91,7 @@ class Monitor {
 		return active;
 	}
 
-	
+	RecordMetadata recordMetadata;
 	void getInitialInfoFromSocket() throws IOException {
 		// 構造体情報の取得
 		QueryInfo ri_msg = new QueryInfo();
@@ -103,6 +103,13 @@ class Monitor {
 		ri_msg.setInfoType(QueryInfo.INFO_PROFILE_TARGET);
 		ProfileTarget nameinfo = (ProfileTarget) sendRequestAndReceiveResponse(ri_msg);
 		profileTargetName = nameinfo.getName();
+
+		// レコード情報
+		ri_msg = new QueryInfo();
+		ri_msg.setInfoType(QueryInfo.INFO_RECORD_METAINFO);
+		recordMetadata = (RecordMetadata) sendRequestAndReceiveResponse(ri_msg);
+		dataStore.setRecordMetadata(recordMetadata);
+
 	}
 
 	public void setAggressive(Socket sock) {

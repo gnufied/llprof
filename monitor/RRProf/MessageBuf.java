@@ -16,6 +16,7 @@ class MessageTypes {
 	public final static int MSG_NAMES = 8;
 	public final static int MSG_STACK_DATA = 9;
 	public final static int MSG_PROFILE_TARGET = 10;
+	public final static int MSG_RECORD_METADATA = 11;
 
 	public final static int MSG_COMMAND_SUCCEED = 100;
 	public final static int MSG_ERROR = 101;
@@ -67,6 +68,8 @@ class MessageBase {
 			return new ProfileData(buf);
 		case MessageTypes.MSG_PROFILE_TARGET:
 			return new ProfileTarget(buf);
+		case MessageTypes.MSG_RECORD_METADATA:
+			return new RecordMetadata(buf);
 		case MessageTypes.MSG_NAMES:
 			return new Names(buf);
 		case MessageTypes.MSG_STACK_DATA:
@@ -109,6 +112,7 @@ class StartProfile extends MessageBase {
 class QueryInfo extends MessageBase {
 	public final static int INFO_DATA_SLIDE = 1;
 	public final static int INFO_PROFILE_TARGET = 2;
+	public final static int INFO_RECORD_METAINFO = 3;
 
 	int infoType;
 
@@ -162,6 +166,60 @@ class SlideInfo extends MessageBase {
 	}
 }
 
+
+class RecordMetadata extends MessageBase {
+
+	class Item {
+		String name, unit, flags;
+		public String toString() {
+			return "<Item:" + name + "(" + unit + ") "+flags+">";
+		}
+	}
+	public ArrayList<Item> items;
+	int nRecords;
+
+	int getNumRecords(){return nRecords;}
+	RecordMetadata(ByteBuffer buf) {
+		items = new ArrayList<Item>();
+		messageType = MessageTypes.MSG_RECORD_METADATA;
+		
+		
+		String retstr = Charset.forName("UTF-8").decode(buf).toString();
+		StringTokenizer tok = new StringTokenizer(retstr);
+		
+		nRecords = Integer.parseInt(tok.nextToken());
+		for(int i = 0; i < nRecords; i++) {
+			items.add(new Item());
+		}
+		
+		while (tok.hasMoreTokens()) {
+			int idx = Integer.parseInt(tok.nextToken());
+			Item item = items.get(idx);
+			item.name = tok.nextToken();
+			item.unit = tok.nextToken();
+			item.flags = tok.nextToken();
+		}
+	}
+
+	public String toString() {
+		String result = "Items: ";
+		for (Item item : items) {
+			result += item.toString() + ", ";
+		}
+		return result + "end.";
+	}
+	public String getRecordName(int idx) {
+		return items.get(idx).name;
+	}
+	public String getRecordUnit(int idx) {
+		return items.get(idx).unit;
+	}
+	public String getRecordFlag(int idx) {
+		return items.get(idx).flags;
+	}
+
+}
+
 class ProfileTarget extends MessageBase {
 
 	private String name;
@@ -204,9 +262,10 @@ class StructArrayMessage extends MessageBase {
 	}
 
 	public long getLong(int record_index, String slide_name) {
-		assert slide_name != "parent_node_id";
-		assert slide_name != "call_node_id";
-		return buffer.getLong(getSlide(record_index, slide_name));
+		return getLong(record_index, slide_name, 0);
+	}
+	public long getLong(int record_index, String slide_name, int array_index) {
+		return buffer.getLong(getSlide(record_index, slide_name) + array_index * 8);
 	}
 
 	public int getInt(int record_index, String slide_name) {

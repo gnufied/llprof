@@ -7,12 +7,12 @@ import RRProf.DataStore.ThreadStore;
 
 public class RecordSetBrowser extends RecordListView implements DataStore.RecordEventListener{
 	
-	public RecordSetBrowser()
+	public RecordSetBrowser(DataStore ds)
 	{
-		super();
+		super(ds);
 		columns.add(COL_RUNNING_ICON);
 		columns.add(COL_NODENAME);
-		columns.add(COL_ALL_TIME);
+		columns.add(COL_RECORD_ALL(0));
 		columns.add(COL_NUM_NODES);
 		updateColumn();
 	}

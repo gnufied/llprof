@@ -9,8 +9,10 @@
 #include <vector>
 #include <sstream>
 #include <map>
+#include <cstdlib>
 
 #include "platforms.h"
+#include "measurement.h"
 #include "server.h"
 #include <cstring>
 #include <cstdlib>
@@ -18,6 +20,7 @@
 
 #include "call_tree.h"
 #include "class_table.h"
+
 #include "record_type.h"
 
 using namespace std;
@@ -60,9 +63,8 @@ struct MethodNodeInfo
     unsigned int generation_number;
     
     nameid_t nameid;
-
 	children_t *children;
-    time_val_t start_time;
+    profile_value_t start_value[NUM_RECORDS];
 	unsigned int parent_node_id;
 };
 
@@ -71,7 +73,7 @@ struct MethodNodeSerializedInfo
     nameid_t nameid;
     unsigned int call_node_id;
 	unsigned int parent_node_id;
-	time_val_t all_time;
+    profile_value_t profile_value[NUM_RECORDS];
 	unsigned long long int call_count;
 
 };
@@ -79,7 +81,7 @@ struct MethodNodeSerializedInfo
 struct StackInfo
 {
     int node_id;
-    time_val_t start_time;
+    profile_value_t start_value[NUM_RECORDS];
 };
 
 #define ADD_SLIDE(struct_field, field_name_str)     { \
@@ -96,7 +98,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
         MethodNodeSerializedInfo test;
         
         ADD_SLIDE(nameid, "pdata.nameid")
-        ADD_SLIDE(all_time, "pdata.all_time")
+        ADD_SLIDE(profile_value, "pdata.value")
         ADD_SLIDE(call_count, "pdata.call_count")
         ADD_SLIDE(call_node_id, "pdata.call_node_id")
         ADD_SLIDE(parent_node_id, "pdata.parent_node_id")
@@ -108,7 +110,7 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
         StackInfo test;
         
         ADD_SLIDE(node_id, "sdata.node_id")
-        ADD_SLIDE(start_time, "sdata.start_time")
+        ADD_SLIDE(start_value, "sdata.start_value")
         slides[slide_idx].field_name = "sdata.record_size";
         slides[slide_idx].slide = sizeof(test);
         slide_idx++;
@@ -117,6 +119,26 @@ void CallTree_GetSlide(slide_record_t **ret, int *nfield)
     *nfield = slide_idx;
     *ret = slides;
 }
+
+
+string llprof_get_record_info()
+{
+    rtype_metainfo_t metainfo(NUM_RECORDS);
+    llprof_rtype_metainfo(&metainfo);
+    
+    string result;
+    char buf[64];
+    sprintf(buf, "%d", NUM_RECORDS);
+    result = string(buf) + "\n";
+    for(int i = 0; i < NUM_RECORDS; i++)
+    {
+        sprintf(buf, "%d", i);
+        result += string(buf) + " " + metainfo.records[i] + "\n";
+    }
+    return result;
+}
+
+
 
 
 
@@ -268,7 +290,7 @@ void AddActualRecord(unsigned int cnid)
 	sinfo->call_node_id = cnid;
 	sinfo->parent_node_id = call_node->parent_node_id;
 	sinfo->nameid = call_node->nameid;
-	sinfo->all_time = 0;
+    llprof_rtype_init(sinfo->profile_value);
     sinfo->call_count = 0;
 
 
@@ -369,12 +391,14 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
     get_current_node_info_pair(ti, ninfo, sinfo);
 
     sinfo->call_count++;
-    ninfo->start_time = NOW_TIME;
+    llprof_rtype_start_node(ninfo->start_value);
+    
+    
 
 
     pthread_mutex_lock(&ti->StackMutex);
     StackInfo *stack_info = new_tail_elem(*ti->SerializedStackArray);
-    stack_info->start_time = ninfo->start_time;
+    memcpy(stack_info->start_value, ninfo->start_value, NUM_RECORDS * 8);
     stack_info->node_id = ti->CurrentCallNodeID;
     pthread_mutex_unlock(&ti->StackMutex);
  
@@ -401,8 +425,8 @@ void llprof_return_handler()
 
     get_current_node_info_pair(ti, ninfo, sinfo);
     
-    time_val_t diff = NOW_TIME - ninfo->start_time;
-    sinfo->all_time += diff;
+    
+    llprof_rtype_end_node(ninfo->start_value, sinfo->profile_value);
 
     ti->CurrentCallNodeID = sinfo->parent_node_id;
 #ifdef LLPROF_DEBUG
@@ -545,7 +569,7 @@ void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned 
 
     thread->SerializedStackArray->resize(orig_sz);    
     // protocol: 0番目レコードには現在の時刻情報をいれる
-    (*gBackBuffer_SerializedStackArray)[0].start_time = NOW_TIME;
+    llprof_rtype_stackinfo_nowval((*gBackBuffer_SerializedStackArray)[0].start_value);
     
 
     memset(&(*thread->SerializedStackArray)[0], 0, sizeof(StackInfo) * thread->SerializedStackArray->size());

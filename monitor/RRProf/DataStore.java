@@ -46,11 +46,11 @@ public class DataStore {
 	public abstract class AbstractRecord {
 		Set<RecordEventListener> listeners;
 
-		abstract public long getAllTime();
+		abstract public long getAllValue(int idx);
 
-		abstract public long getAllTimeSent();
+		abstract public long getAllValueSent(int idx);
 
-		abstract public long getChildrenTime();
+		abstract public long getChildrenValue(int idx);
 
 		abstract public long getCallCount();
 
@@ -88,11 +88,11 @@ public class DataStore {
 
 		abstract public Iterable<AbstractRecord> allChild();
 
-		public long getSelfTime() {
+		public long getSelfValue(int idx) {
 			if (isRunning())
 				return -1;
 			else
-				return getAllTimeSent() - getChildrenTime();
+				return getAllValueSent(idx) - getChildrenValue(idx);
 		}
 	}
 
@@ -100,10 +100,10 @@ public class DataStore {
 		public int ID;
 		public ThreadStore threadStore;
 		public Record parent;
-		public long allTime;
-		public long childrenTime;
+		public long[] allValue;
+		public long[] childrenValue;
 		public int callCount;
-		public long runningTime;
+		public long[] runningValue;
 		public CallName callName;
 		List<AbstractRecord> children;
 
@@ -111,16 +111,16 @@ public class DataStore {
 			return ID;
 		}
 
-		public long getAllTime() {
-			return allTime + runningTime;
+		public long getAllValue(int idx) {
+			return allValue[idx] + runningValue[idx];
 		}
 
-		public long getAllTimeSent() {
-			return allTime;
+		public long getAllValueSent(int idx) {
+			return allValue[idx];
 		}
 
-		public long getChildrenTime() {
-			return childrenTime;
+		public long getChildrenValue(int idx) {
+			return childrenValue[idx];
 		}
 
 		public long getCallCount() {
@@ -133,10 +133,10 @@ public class DataStore {
 			threadStore = null;
 			parent = null;
 			callName = null;
-			allTime = 0;
-			childrenTime = 0;
+			allValue = new long[recordMetadata.getNumRecords()];
+			childrenValue = new long[recordMetadata.getNumRecords()];
 			callCount = 0;
-			runningTime = 0;
+			runningValue = new long[recordMetadata.getNumRecords()];
 		}
 
 		public String getPathString() {
@@ -169,8 +169,12 @@ public class DataStore {
 			} else {
 				elem.setAttribute("cn", "0");
 			}
-			elem.setAttribute("allval", Long.toString(allTime));
-			elem.setAttribute("selfval", Long.toString(allTime - childrenTime));
+			for(int i = 0; i < recordMetadata.getNumRecords(); i++) {
+				elem.setAttribute("all_" + Integer.toString(i), Long.toString(allValue[i]));
+				elem.setAttribute("self_" + Integer.toString(i), Long.toString(allValue[i] - childrenValue[i]));
+				
+			}
+			
 			elem.setAttribute("count", Long.toString(callCount));
 
 			for (AbstractRecord arec : children) {
@@ -252,17 +256,18 @@ public class DataStore {
 		}
 
 		public String getLabelString(String qlabel, int division) {
+			/// @todo index 0 
 			if (callName == null)
 				return "Null Record";
 			else {
-				int p = getPercentage();
+				int p = getPercentage(0);
 				if (p == -1)
 					return String.format("%s %d" + qlabel, getCallName()
-							.getName(), getAllTime() / division);
+							.getName(), getAllValue(0) / division);
 				else
 					return String.format("%s %d" + qlabel + "(%d%%)",
-							getCallName().getName(), getAllTime() / division,
-							getPercentage());
+							getCallName().getName(), getAllValue(0) / division,
+							getPercentage(0));
 			}
 		}
 
@@ -278,28 +283,29 @@ public class DataStore {
 			return children.indexOf(child);
 		}
 
-		public int getPercentage() {
+		public int getPercentage(int idx) {
 			if (parent == null)
 				return 100;
-			if (parent.getAllTime() == 0)
+			if (parent.getAllValue(idx) == 0)
 				return -1;
-			return (int) (100 * getAllTime() / parent.getAllTime());
+			return (int) (100 * getAllValue(idx) / parent.getAllValue(idx));
 		}
 
-		public void addRunningTime(long n) {
-			runningTime += n;
+		public void addRunningValue(int index, long n) {
+			runningValue[index] += n;
 		}
 
-		public void subRunningTime(long n) {
-			runningTime -= n;
+		public void subRunningValue(int index, long n) {
+			runningValue[index] -= n;
 		}
 
-		public long getRunningTime() {
-			return runningTime;
+		public long getRunningValue(int index) {
+			return runningValue[index];
 		}
 
 		public boolean isRunning() {
-			return runningTime != 0;
+			/// \todo フラグを作る
+			return runningValue[0] != 0;
 		}
 
 		public int numRecords() {
@@ -332,22 +338,22 @@ public class DataStore {
 		}
 
 		@Override
-		public long getAllTime() {
+		public long getAllValue(int i) {
 			long result = 0;
 			synchronized (record_set) {
 				for (AbstractRecord rec : record_set) {
-					result += rec.getAllTime();
+					result += rec.getAllValue(i);
 				}
 			}
 			return result;
 		}
 
 		@Override
-		public long getAllTimeSent() {
+		public long getAllValueSent(int i) {
 			long result = 0;
 			synchronized (record_set) {
 				for (AbstractRecord rec : record_set) {
-					result += rec.getAllTimeSent();
+					result += rec.getAllValueSent(i);
 				}
 			}
 			return result;
@@ -365,11 +371,11 @@ public class DataStore {
 		}
 
 		@Override
-		public long getChildrenTime() {
+		public long getChildrenValue(int idx) {
 			long result = 0;
 			synchronized (record_set) {
 				for (AbstractRecord rec : record_set) {
-					result += rec.getChildrenTime();
+					result += rec.getChildrenValue(idx);
 				}
 			}
 			return result;
@@ -663,8 +669,13 @@ public class DataStore {
 
 	class RunningRecordInfo {
 		public Record target;
-		public long startTime;
-		public long runningTime;
+		public long[] startValue;
+		public long[] runningValue;
+		
+		RunningRecordInfo() {
+			startValue = new long[recordMetadata.getNumRecords()];
+			runningValue = new long[recordMetadata.getNumRecords()];
+		}
 	}
 
 	Map<Long, ThreadStore> threadStores;
@@ -672,10 +683,16 @@ public class DataStore {
 	Map<CallName, CallNameRecordSet> name_to_node;
 	Map<Long, String> name_id_map;
 
-	public DataStore() {
+	DataStore() {
 		name_to_node = new HashMap<CallName, CallNameRecordSet>();
 		listeners = new HashSet<EventListener>();
 		threadStores = new HashMap<Long, ThreadStore>();
+	}
+	
+	RecordMetadata recordMetadata;
+	
+	public void setRecordMetadata(RecordMetadata rm) {
+		recordMetadata = rm;
 	}
 
 	public ThreadStore addThreadStore(long thread_id) {
@@ -741,41 +758,42 @@ public class DataStore {
 
 		// 実行中補正の記録
 		StackData sdata = data.getStackData();
-
-		long nowTime = sdata.getLong(0, "start_time");
-
-		while (sdata.numRecords() - 1 < running_records.size()) {
-			RunningRecordInfo runrec = running_records.get(running_records
-					.size() - 1);
-			running_records.remove(running_records.size() - 1);
-			assert (runrec != null);
-			assert (runrec.target != null);
-			if (runrec.target != null) {
-				runrec.target.subRunningTime(runrec.runningTime);
-				runrec.target.callUpdateDataEvent();
+		for(int recidx = 0; recidx < recordMetadata.getNumRecords(); recidx++) {
+			long nowTime = sdata.getLong(0, "start_value", recidx);
+	
+			while (sdata.numRecords() - 1 < running_records.size()) {
+				RunningRecordInfo runrec = running_records.get(running_records
+						.size() - 1);
+				running_records.remove(running_records.size() - 1);
+				assert (runrec != null);
+				assert (runrec.target != null);
+				if (runrec.target != null) {
+					runrec.target.subRunningValue(recidx, runrec.runningValue[recidx]);
+					runrec.target.callUpdateDataEvent();
+				}
 			}
-		}
-		while (sdata.numRecords() - 1 > running_records.size()) {
-			running_records.add(new RunningRecordInfo());
-		}
-		assert (running_records.size() == sdata.numRecords() - 1);
-		for (int i = 1; i < sdata.numRecords(); i++) {
-			RunningRecordInfo rrec = running_records.get(i - 1);
-			int node_id = sdata.getInt(i, "node_id");
-			if (node_id != 0) {
+			while (sdata.numRecords() - 1 > running_records.size()) {
+				running_records.add(new RunningRecordInfo());
+			}
+			assert (running_records.size() == sdata.numRecords() - 1);
+			for (int i = 1; i < sdata.numRecords(); i++) {
+				RunningRecordInfo rrec = running_records.get(i - 1);
+				int node_id = sdata.getInt(i, "node_id");
+				if (node_id != 0) {
+					if (rrec.target != null) {
+						rrec.target.subRunningValue(recidx, rrec.runningValue[recidx]);
+						rrec.target.callUpdateDataEvent();
+					}
+					rrec.target = thread_store.getNodeRecord(node_id);
+					rrec.startValue[recidx] = sdata.getLong(i, "start_value", recidx);
+					rrec.runningValue[recidx] = 0;
+				}
 				if (rrec.target != null) {
-					rrec.target.subRunningTime(rrec.runningTime);
+					long old_rt = rrec.runningValue[recidx];
+					rrec.runningValue[recidx] = nowTime - rrec.startValue[recidx];
+					rrec.target.addRunningValue(recidx, rrec.runningValue[recidx] - old_rt);
 					rrec.target.callUpdateDataEvent();
 				}
-				rrec.target = thread_store.getNodeRecord(node_id);
-				rrec.startTime = sdata.getLong(i, "start_time");
-				rrec.runningTime = 0;
-			}
-			if (rrec.target != null) {
-				long old_rt = rrec.runningTime;
-				rrec.runningTime = nowTime - rrec.startTime;
-				rrec.target.addRunningTime(rrec.runningTime - old_rt);
-				rrec.target.callUpdateDataEvent();
 			}
 		}
 
@@ -799,10 +817,11 @@ public class DataStore {
 				record.callName = cnid;
 				record.parent.addChild(record);
 			}
-			record.allTime += data.getLong(i, "all_time");
-
-			if (record.parent != null)
-				record.parent.childrenTime += data.getLong(i, "all_time");
+			for(int j = 0; j < recordMetadata.getNumRecords(); j++) {
+				record.allValue[j] += data.getLong(i, "value", j);
+				if (record.parent != null)
+					record.parent.childrenValue[j] += data.getLong(i, "value", j);
+			}
 			record.callCount += data.getLong(i, "call_count");
 			record.callUpdateDataEvent();
 		}
@@ -859,5 +878,9 @@ public class DataStore {
 		} catch (IOException e1) {
 			e1.printStackTrace();
 		}
+	}
+
+	public RecordMetadata getRecordMetadata() {
+		return recordMetadata;
 	}
 }

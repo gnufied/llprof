@@ -137,12 +137,13 @@ public class SquaresView extends JPanel implements ChangeListener {
 
 		double alltime = 0.0;
 		double prev_pos = 0.0;
-		if(ctx.r.getAllTime() == 0) {
+		// @todo index 0
+		if(ctx.r.getAllValue(0) == 0) {
 			for(int i = 0; i < ctx.r.getChildCount(); i++) {
-				alltime += ctx.r.getChild(i).getAllTime();
+				alltime += ctx.r.getChild(i).getAllValue(0);
 			}
 		}else {
-			alltime = ctx.r.getAllTime();
+			alltime = ctx.r.getAllValue(0);
 		}
 		
 		PaintContext child_ctx = new PaintContext();
@@ -162,7 +163,8 @@ public class SquaresView extends JPanel implements ChangeListener {
 		for(int i = 0; i < ctx.r.getChildCount(); i++)
 		{
 			child_ctx.r = ctx.r.getChild(i);
-			double p = (double)(child_ctx.r.getAllTime()) / alltime;
+			/// @todo index zero
+			double p = (double)(child_ctx.r.getAllValue(0)) / alltime;
 			if(p <= 0.001)
 				continue;
 			if(ctx.orient == ORIENT_H) {

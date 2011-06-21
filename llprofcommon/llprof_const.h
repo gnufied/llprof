@@ -42,10 +42,14 @@
 #   define INFO_DATA_SLIDE      1
 //   プロファイルターゲット名
 #   define INFO_PROFILE_TARGET  2
+//   レコード情報
+#   define INFO_RECORD_METAINFO  3
 // 返答: 構造体の各要素のメンバーのオフセット値
 #define MSG_SLIDE_INFO          5
 // 返答: プロファイルターゲット名
 #define MSG_PROFILE_TARGET      10
+// 返答: レコードメタ情報
+#define MSG_RECORD_METAINFO      11
 
 // プロファイルメッセージの要求
 #define MSG_REQ_PROFILE_DATA    4    

@@ -6,6 +6,7 @@
 #define CALL_TREE_H
 
 #include "llprof_const.h"
+#include <string>
 
 
 typedef long long int time_val_t;
@@ -50,6 +51,7 @@ void llprof_return_handler();
 
 void llprof_calltree_init();
 
+std::string llprof_get_record_info();
 
 
 //

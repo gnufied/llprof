@@ -12,8 +12,8 @@ public class RecordSetViewer extends JPanel {
 	JTextArea field;
 
 	
-	public RecordSetViewer(DataStore.RecordSet recset){
-		RecordSetBrowser list = new RecordSetBrowser();
+	public RecordSetViewer(DataStore ds, DataStore.RecordSet recset){
+		RecordSetBrowser list = new RecordSetBrowser(ds);
 		list.setRecordSet(recset);
         JScrollPane list_scroll = new JScrollPane();
         list_scroll.getViewport().setView(list);
