@@ -246,20 +246,13 @@ T *new_tail_elem(vector<T> &arr)
 }
 
 
-unsigned int GetChildNodeID(unsigned int parent_id, nameid_t nameid, void *name_data_ptr)
+inline unsigned int GetChildNodeID(ThreadInfo *ti, nameid_t nameid, void *name_data_ptr)
 {
-    ThreadInfo *ti = CURRENT_THREAD;
-
+    unsigned int parent_id = ti->CurrentCallNodeID;
 	MethodNodeInfo *node_info = &ti->NodeInfoArray[parent_id];
-    
-    
-    
     children_t::iterator iter = node_info->children->find(nameid);
-    
 	if(iter == node_info->children->end())
-	{
 		return ti->AddCallNode(parent_id, nameid, name_data_ptr);
-    }
 	return (*iter).second;
 }
 
@@ -316,7 +309,48 @@ static MethodNodeInfo *GetNodeInfo(unsigned int call_node_id)
     return call_node;
 }
 
+/*
+inline void get_current_node_info_pair(ThreadInfo *ti, MethodNodeInfo *&ninfo, MethodNodeSerializedInfo *&sinfo)
+{
+    sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+}
 
+inline void get_current_node_info_pair_with_parent(
+    ThreadInfo *ti,
+    MethodNodeInfo *&ninfo,
+    MethodNodeSerializedInfo *&sinfo,
+    MethodNodeSerializedInfo *&psinfo)
+{
+    sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
+    ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+    psinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
+}
+*/
+
+inline void get_current_node_info_pair(ThreadInfo *ti, MethodNodeInfo *&ninfo, MethodNodeSerializedInfo *&sinfo)
+{
+    pthread_mutex_lock(&ti->DataMutex);
+    ninfo = &ti->NodeInfoArray[ti->CurrentCallNodeID];
+    if(ninfo->generation_number != ti->GenerationNumber)
+        AddActualRecord(ti->CurrentCallNodeID);
+    sinfo = &(*ti->SerializedNodeInfoArray)[ninfo->serialized_node_index];
+    pthread_mutex_unlock(&ti->DataMutex);
+}
+
+inline void get_current_node_info_pair_with_parent(
+    ThreadInfo *ti,
+    MethodNodeInfo *&ninfo,
+    MethodNodeSerializedInfo *&sinfo,
+    MethodNodeSerializedInfo *&psinfo)
+{
+    get_current_node_info_pair(ti, ninfo, sinfo);
+    psinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
+}
+
+
+
+    
 
 unsigned int ThreadInfo::AddCallNode(unsigned int parent_node_id, nameid_t nameid, void *name_info_ptr)
 {
@@ -348,20 +382,27 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
 	ti->stop = 1;
 
     unsigned int before = ti->CurrentCallNodeID;
-    ti->CurrentCallNodeID = GetChildNodeID(ti->CurrentCallNodeID, nameid, name_info);
+    ti->CurrentCallNodeID = GetChildNodeID(ti, nameid, name_info);
     
-    MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-    MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
+
+    //MethodNodeSerializedInfo sinfo_data;
+    //MethodNodeSerializedInfo *sinfo = &sinfo_data;
+
+    MethodNodeSerializedInfo *sinfo;
+    MethodNodeInfo *ninfo;
+    get_current_node_info_pair(ti, ninfo, sinfo);
 
     sinfo->call_count++;
     ninfo->start_time = NOW_TIME;
+
 
     pthread_mutex_lock(&ti->StackMutex);
     StackInfo *stack_info = new_tail_elem(*ti->SerializedStackArray);
     stack_info->start_time = ninfo->start_time;
     stack_info->node_id = ti->CurrentCallNodeID;
     pthread_mutex_unlock(&ti->StackMutex);
-
+ 
+    
 	ti->stop = 0;
 }
 
@@ -379,10 +420,12 @@ void llprof_return_handler()
     
 	assert(ti->stop == 0);
 	ti->stop = 1;
+    MethodNodeSerializedInfo *sinfo;
+    MethodNodeInfo *ninfo;
+    MethodNodeSerializedInfo *parent_sinfo;
+    
 
-    MethodNodeSerializedInfo *sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-    MethodNodeInfo *ninfo = GetNodeInfo(ti->CurrentCallNodeID);
-    MethodNodeSerializedInfo *parent_sinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
+    get_current_node_info_pair_with_parent(ti, ninfo, sinfo, parent_sinfo);
     
     time_val_t diff = NOW_TIME - ninfo->start_time;
     sinfo->all_time += diff;
@@ -391,9 +434,11 @@ void llprof_return_handler()
     assert(ti->CurrentCallNodeID != 0);
     parent_sinfo->children_time += diff;
 
+
     pthread_mutex_lock(&ti->StackMutex);
     ti->SerializedStackArray->resize(ti->SerializedStackArray->size()-1);
     pthread_mutex_unlock(&ti->StackMutex);
+
 
 	ti->stop = 0;	
 }

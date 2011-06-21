@@ -7,197 +7,211 @@ import java.awt.*;
 import java.awt.event.*;
 
 import javax.swing.*;
-import javax.swing.event.*;
-import javax.swing.tree.*;
 
+public class MonitorGUI extends JFrame implements ActionListener, MouseListener {
 
+	class BrowserCellRenderer extends JLabel implements ListCellRenderer {
+		/*
+		final static ImageIcon longIcon = new ImageIcon("long.gif");
+		final static ImageIcon shortIcon = new ImageIcon("short.gif");
+		*/
+		// This is the only method defined by ListCellRenderer.
+		// We just reconfigure the JLabel each time we're called.
 
-public class MonitorGUI extends JFrame implements ActionListener {
-	private Monitor mon;
-	
-	JTabbedPane browserPane, viewerPane;
-    JTable childrenTable;
-    JPanel statisticsPane;
-    
-    CallTreeBrowserView callTreeBrowser;
-    MethodBrowser methodBrowser;
-    
-    public class StatisticField{
-    	Object value;
-    	public JLabel label;
-    	
-    	public void updateLabel() {
-    		if(value == null)
-    			label.setText("(null)");
-    		else
-    			label.setText(value.toString());
-    	}
-    	public void setLong(long val) {
-    		value = val;
-    		updateLabel();
-    	}
-    	public void addLong(long val) {
-    		value = (Long)value + val;
-    		updateLabel();
-    	}
-    }
-    
-    
-    StatisticField numRecordsField, numMethodsField, inputSizeField, outputSizeField;
-
-    MonitorGUI(){
-		setTitle("rrprof");
-		setBounds(60, 60, 800, 900);
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		
-        callTreeBrowser = new CallTreeBrowserView();
-        //callTreeBrowser.setMeasureMode(null, 1);
-        callTreeBrowser.setMeasureMode("ms", 1000*1000);
-        JScrollPane ct_scrollPane = new JScrollPane();
-        ct_scrollPane.getViewport().setView(callTreeBrowser);
-
-        methodBrowser = new MethodBrowser(this);
-        JScrollPane mb_scrollPane = new JScrollPane();
-        mb_scrollPane.getViewport().setView(methodBrowser);
-
-        browserPane = new JTabbedPane();
-        browserPane.add("Call Tree", ct_scrollPane);
-        browserPane.add("Method", mb_scrollPane);
-        
-        statisticsPane = new JPanel();
-        statisticsPane.setLayout(new GridLayout(10,0));
-
-        browserPane.add("Profiler info", statisticsPane);
-        
-        viewerPane = new JTabbedPane();
-
-		JSplitPane sp = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
-        sp.setDividerSize(5);
-        sp.setLeftComponent(browserPane);
-        sp.setRightComponent(viewerPane);
-
-		getContentPane().add(sp);
-        
-        JMenuBar menuBar = new JMenuBar();
-        JMenu menuFile = new JMenu("File");
-        menuFile.setMnemonic('F');
-        menuBar.add(menuFile);
-	        JMenuItem menuConnect = new JMenuItem("Connect");
-	        menuConnect.setMnemonic('C');
-	        menuConnect.addActionListener(this);
-	        menuFile.add(menuConnect);
-	        JMenuItem menuOpenActive = new JMenuItem("Open Active");
-	        menuOpenActive.setMnemonic('O');
-	        menuOpenActive.addActionListener(this);
-	        menuFile.add(menuOpenActive);
-	        JMenuItem menuOpenHeavy = new JMenuItem("Open Heavy");
-	        menuOpenHeavy.setMnemonic('H');
-	        menuOpenHeavy.addActionListener(this);
-	        menuFile.add(menuOpenHeavy);
-	        JMenuItem menuExportXML = new JMenuItem("Export XML");
-	        menuExportXML.setMnemonic('X');
-	        menuExportXML.addActionListener(this);
-	        menuFile.add(menuExportXML);
-        getRootPane().setJMenuBar(menuBar);
-        
-        numRecordsField = addStatisticsField("numRecords", "Number of records", new Long(0));
-        numMethodsField = addStatisticsField("numMethods", "Number of methods", new Long(0));
-        inputSizeField = addStatisticsField("inputSize", "Input size", new Long(0));
-        outputSizeField = addStatisticsField("outputSize", "Output size", new Long(0));
-	}
-    public StatisticField addStatisticsField(String field_id, String label, Object value) {
-    	StatisticField field = new StatisticField();
-    	field.label = new JLabel();
-    	field.value = value;
-    	field.updateLabel();
-    	
-    	JPanel panel = new JPanel();
-    	panel.setLayout(new GridLayout(1,2));
-    	panel.add(new JLabel(label));
-    	panel.add(field.label);
-    	statisticsPane.add(panel);
-    	return field;
-    	
-    }
-    
-	public void actionPerformed(ActionEvent e) {
-		if(e.getActionCommand() == "Connect")
-        {
-			ConnectDialog dlg = new ConnectDialog(this);
-			dlg.setVisible(true);
-        }
-		else if(e.getActionCommand() == "Open Active")
-        {
-			callTreeBrowser.openTree(CallTreeBrowserView.OTM_ACTIVE);
-        }
-		else if(e.getActionCommand() == "Open Heavy")
-        {
-			callTreeBrowser.openTree(CallTreeBrowserView.OTM_BOTTLENECK);
-        }
-		else if(e.getActionCommand() == "Export XML")
-        {
-		    JFileChooser filechooser = new JFileChooser();
-
-		    int selected = filechooser.showSaveDialog(this);
-		    if (selected == JFileChooser.APPROVE_OPTION){
-		      File file = filechooser.getSelectedFile();
-		      mon.getDataStore().exportXML(file.getName());
-		    }else if (selected == JFileChooser.CANCEL_OPTION){
-		    }else if (selected == JFileChooser.ERROR_OPTION){
-		    	System.out.println("Error: Open dialog");
-		    }
+		public Component getListCellRendererComponent(JList list, // the list
+				Object value, // value to display
+				int index, // cell index
+				boolean isSelected, // is the cell selected
+				boolean cellHasFocus) // does the cell have focus
+		{
+			MonitorBrowser b = (MonitorBrowser)value;
+			String label = b.getListLabel();
 			
-        }
-
-	}
-	
-	public void connect(String host, int port, int interval) {
-		mon = new Monitor();
-		callTreeBrowser.setMonitor(mon);
-		
-		methodBrowser.setMonitor(mon);
-		mon.startProfile(host, port);
-		if(mon.is_connected()){
-			Timer t = new Timer();
-			t.schedule(new ProfileTimer(), 0, interval);
+			setText(label);
+			// setIcon((s.length() > 10) ? longIcon : shortIcon);
+			if (isSelected) {
+				setBackground(list.getSelectionBackground());
+				setForeground(list.getSelectionForeground());
+			} else {
+				setBackground(list.getBackground());
+				setForeground(list.getForeground());
+			}
+			setEnabled(list.isEnabled());
+			setFont(list.getFont());
+			setOpaque(true);
+			return this;
 		}
 	}
 
-	public void openRecordSetView(DataStore.RecordSet recset)
-	{
-		RecordSetViewer view = new RecordSetViewer(recset);
-		viewerPane.add("Method", view);
+	JList browserList;
+	DefaultListModel browserListModel;
+	MonitorBrowser currentBrowser;
+	JSplitPane rootPane;
+	JPopupMenu browserListPopup;
+	JMenuBar menuBar;
+	
+	public static final String WINDOW_TITLE = "Profiler Monitor";
+
+	Timer timer;
+	MonitorGUI() {
+		currentBrowser = null;
+		setTitle(WINDOW_TITLE);
+		setBounds(60, 60, 800, 900);
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+
+		menuBar = new JMenuBar();
+		JMenu menuFile = new JMenu("File");
+		menuFile.setMnemonic('F');
+		menuBar.add(menuFile);
+		JMenuItem menuConnect = new JMenuItem("Connect");
+		menuConnect.setMnemonic('C');
+		menuConnect.addActionListener(this);
+		menuFile.add(menuConnect);
+		JMenuItem menuOpenActive = new JMenuItem("Open Active");
+		menuOpenActive.setMnemonic('O');
+		menuOpenActive.addActionListener(this);
+		menuFile.add(menuOpenActive);
+		JMenuItem menuOpenHeavy = new JMenuItem("Open Heavy");
+		menuOpenHeavy.setMnemonic('H');
+		menuOpenHeavy.addActionListener(this);
+		menuFile.add(menuOpenHeavy);
+		JMenuItem menuExportXML = new JMenuItem("Export XML");
+		menuExportXML.setMnemonic('X');
+		menuExportXML.addActionListener(this);
+		menuFile.add(menuExportXML);
+		getRootPane().setJMenuBar(menuBar);
+
+		rootPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT);
+
+		browserList = new JList();
+		browserListModel = new DefaultListModel();
+		browserList.setCellRenderer(new BrowserCellRenderer());
+		browserList.setModel(browserListModel);
+		rootPane.setDividerSize(5);
+		rootPane.setLeftComponent(browserList);
+		rootPane.setRightComponent(new JPanel());
+		rootPane.setDividerLocation(240);
+
+		getContentPane().add(rootPane);
+		
+		
+		// List popup menu
+		browserListPopup = new JPopupMenu();
+		browserList.addMouseListener(this);
+		
+		JMenuItem item;
+		item = new JMenuItem("Disconnect");
+		item.addActionListener(this);
+		item.setActionCommand("browser.disconnect");
+		browserListPopup.add(item);
+
+		item = new JMenuItem("Reconnect");
+		item.addActionListener(this);
+		item.setActionCommand("browser.reconnect");
+		browserListPopup.add(item);
+
+		timer = new Timer();
+		timer.schedule(new ProfileTimer(), 0, 500);
+	}
+
+	
+	public void mousePressed(MouseEvent e) {
+		if (e.getComponent() == browserList && e.isPopupTrigger()) {
+			browserListPopup.show(e.getComponent(), e.getX(), e.getY());
+		}
+	}
+	public void mouseReleased(MouseEvent e) {
+		if (e.getComponent() == browserList && e.isPopupTrigger()) {
+			browserListPopup.show(e.getComponent(), e.getX(), e.getY());
+		}
+	}
+	public void mouseClicked(MouseEvent e) {
+	}
+	public void mouseEntered(MouseEvent e) {
+	}
+	public void mouseExited(MouseEvent e) {
 	}
 	
-    class ProfileTimer extends TimerTask {
-        public void run(){
-        	if(mon.is_connected()){
-	        	try{
-	        		mon.getProfileData();
-	        		// mon.printProfileData();
-	        		
-	        		numRecordsField.setLong(mon.getDataStore().numAllNodes());
-	        		numMethodsField.setLong(mon.getDataStore().numCallNames());
-	        		inputSizeField.setLong(mon.getInputSize());
-	        		outputSizeField.setLong(mon.getOutputSize());
-	        	}
-	    		catch(IOException e)
-	    		{
-	    			e.printStackTrace();
-	    		}
-        	}
-        }
-    }
+	public MonitorBrowser newBrowser() {
+		MonitorBrowser b = new MonitorBrowser();
+		browserListModel.addElement(b);
+		browserList.repaint();
+		return b;
+	}
+
+	public void setActiveBrowser(MonitorBrowser b) {
+		if(currentBrowser != b) {
+			setTitle(WINDOW_TITLE + " - " + b.getListLabel());
+			rootPane.setRightComponent(b);
+			rootPane.repaint();
+			currentBrowser = b;
+		}
+	}
 	
+	public void actionPerformed(ActionEvent e) {
+
+
+		if (e.getActionCommand() == "Connect") {
+			ConnectDialog dlg = new ConnectDialog(this);
+			dlg.setVisible(true);
+		} else if (e.getActionCommand() == "Open Active") {
+			currentBrowser.callTreeBrowser
+					.openTree(CallTreeBrowserView.OTM_ACTIVE);
+		} else if (e.getActionCommand() == "Open Heavy") {
+			currentBrowser.callTreeBrowser
+					.openTree(CallTreeBrowserView.OTM_BOTTLENECK);
+		} else if (e.getActionCommand() == "Export XML") {
+			JFileChooser filechooser = new JFileChooser();
+
+			int selected = filechooser.showSaveDialog(this);
+			if (selected == JFileChooser.APPROVE_OPTION) {
+				File file = filechooser.getSelectedFile();
+				currentBrowser.getMonitor().getDataStore().exportXML(file.getName());
+			} else if (selected == JFileChooser.CANCEL_OPTION) {
+			} else if (selected == JFileChooser.ERROR_OPTION) {
+				System.out.println("Error: Open dialog");
+			}
+
+		} else if (e.getActionCommand() == "browser.disconnect") {
+			MonitorBrowser b = (MonitorBrowser)browserList.getSelectedValue();
+			if(b != null) {
+				setActiveBrowser(b);
+				b.reset();
+			}
+		} else if (e.getActionCommand() == "browser.reconnect") {
+			MonitorBrowser b = (MonitorBrowser)browserList.getSelectedValue();
+			if(b != null) {
+				setActiveBrowser(b);
+				b.connect();
+			}
+		}
+		
+	}
+
+	public void connect(String host, int port, int interval) {
+		MonitorBrowser b = newBrowser();
+		b.connect(host, port, interval);
+		setActiveBrowser(b);
+		browserList.repaint();
+	}
+
+	class ProfileTimer extends TimerTask {
+		public void run() {
+			if(currentBrowser != null)
+				currentBrowser.updateProfiler();
+		}
+	}
+
 	public static void main(String[] args) throws Exception {
 		MonitorGUI frame = new MonitorGUI();
-	    frame.setVisible(true);
-	    
-	    if(args.length > 2)
-	    {
-	    	frame.connect(args[0], Integer.parseInt(args[1]), Integer.parseInt(args[2]));
-	    }
-	    
+		frame.setVisible(true);
+
+		if (args.length > 2) {
+			frame.connect(args[0], Integer.parseInt(args[1]), Integer
+					.parseInt(args[2]));
+		}
+
 	}
-	
+
+
 }

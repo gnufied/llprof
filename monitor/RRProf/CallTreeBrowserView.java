@@ -207,7 +207,7 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
     	   for(TreeModelListener l: listeners) {
     		   l.treeNodesInserted(event);
     	   }
-    	   
+    	   /*
 		   System.out.print(":: Add [");
 		   System.out.print(inserted_list.size());
 		   System.out.print("] ");		   
@@ -227,6 +227,7 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
     		   }
     	   }
     	   System.out.println();
+    	   */
        }
 
 	   public void reload()

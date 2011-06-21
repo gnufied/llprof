@@ -60,12 +60,6 @@ public class DataStore {
 		public boolean isRunning() {
 			return false;
 		}
-		public String getTargetClass(){
-			return "NO-CLASS";
-		}
-		public String getTargetMethodName(){
-			return "NO-METHOD";
-		}
 
 		public int numRecords(){
 			return 1;
@@ -231,7 +225,7 @@ public class DataStore {
         
         public String getRecordName()
         {
-    		return String.format("%s", getTargetName());
+    		return getTargetName();
         }
         
        public Record getParent()

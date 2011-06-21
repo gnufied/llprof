@@ -11,8 +11,7 @@ public class RecordSetBrowser extends RecordListView implements DataStore.Record
 	{
 		super();
 		columns.add(COL_RUNNING_ICON);
-		columns.add(COL_CLASS);
-		columns.add(COL_METHOD);
+		columns.add(COL_NODENAME);
 		columns.add(COL_ALL_TIME);
 		columns.add(COL_NUM_NODES);
 		updateColumn();

@@ -10,7 +10,7 @@ using namespace std;
 #include "measurement.h"
 
 
-static PyObject * hello(PyObject *self, PyObject *args)
+static PyObject * minit(PyObject *self, PyObject *args)
 {
     printf("Hello World!weweerwerwe!\n");
     Py_RETURN_NONE;
@@ -63,7 +63,7 @@ const char *python_name_func(nameid_t nameid, void *p)
 }
 
 static PyMethodDef ext_methods[] = {
-    {"hello", hello, METH_VARARGS, "return hello.\n"},
+    {"__init__", minit, METH_VARARGS, "Initialize"},
     {NULL, NULL}
 };
 

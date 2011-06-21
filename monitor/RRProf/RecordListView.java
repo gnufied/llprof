@@ -29,12 +29,11 @@ public class RecordListView extends JTable implements ListSelectionListener{
 
 	
 	static final int COL_RUNNING_ICON = 1;
-	static final int COL_CLASS = 2;
-	static final int COL_METHOD = 3;
-	static final int COL_ALL_TIME = 4;
-	static final int COL_SELF_TIME = 5;
-	static final int COL_NUM_NODES = 6;
-	static final int COL_NUM_CALLS = 7;
+	static final int COL_NODENAME = 2;
+	static final int COL_ALL_TIME = 3;
+	static final int COL_SELF_TIME = 4;
+	static final int COL_NUM_NODES = 5;
+	static final int COL_NUM_CALLS = 6;
 	
 	ArrayList<Integer> columns;
 	
@@ -56,9 +55,7 @@ public class RecordListView extends JTable implements ListSelectionListener{
 			switch(columns.get(columnIndex)) {
 			case COL_RUNNING_ICON:
 				return Icon.class;
-			case COL_CLASS:
-				return String.class;
-			case COL_METHOD:
+			case COL_NODENAME:
 				return String.class;
 			case COL_ALL_TIME:
 				return Long.class;
@@ -81,8 +78,7 @@ public class RecordListView extends JTable implements ListSelectionListener{
 		public String getColumnName(int columnIndex) {
 			switch(columns.get(columnIndex)) {
 			case COL_RUNNING_ICON:	return "Run";
-			case COL_METHOD:			return "Method";
-			case COL_CLASS:			return "Class";
+			case COL_NODENAME:			return "Name";
 			case COL_ALL_TIME:		return "AllTime";
 			case COL_SELF_TIME:		return "SelfTime";
 			case COL_NUM_NODES:	return "numRecords";
@@ -104,10 +100,8 @@ public class RecordListView extends JTable implements ListSelectionListener{
 			switch(columns.get(columnIndex)) {
 			case COL_RUNNING_ICON:
 				return rec.isRunning() ? runningIcon : normalIcon;
-			case COL_CLASS:
-				return rec.getTargetClass();
-			case COL_METHOD:
-				return rec.getTargetMethodName();
+			case COL_NODENAME:
+				return rec.getRecordName();
 			case COL_ALL_TIME:
 				return rec.getAllTime();
 			case COL_SELF_TIME:
