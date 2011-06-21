@@ -38,4 +38,9 @@ $ rdoc
 ソースコードはmonitorディレクトリ以下のRRProfにあります。
 
 
+* 環境変数
+
+LLPROF_PROFILE_TARGET_NAME      プロファイルターゲット名
+LLPROF_AGG_HOST                 アグレッシブモード時の接続先ホスト名
+LLPROF_AGG_PORT                 アグレッシブモード時の接続先ポート
 

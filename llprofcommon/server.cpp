@@ -19,11 +19,12 @@ using namespace std;
 
 
 
-
+string g_profile_target_name;
 int gServerStartedFlag;
-
-
 pthread_t gServerThread;
+
+int g_aggressive_thread_started = 0;
+pthread_t g_aggressive_thread;
 
 int send_full(int sock, char *pbuf, int sz)
 {
@@ -131,6 +132,11 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
             slide_info_to_str(buf, sizeof(buf));
             SendMessage(sock, MSG_SLIDE_INFO, buf, strlen(buf));
         }
+        else if(info_type == INFO_PROFILE_TARGET)
+        {
+            string name = llprof_get_target_name();
+            SendMessage(sock, MSG_PROFILE_TARGET, name.c_str(), name.length());
+        }
         break;
     }
     case MSG_REQ_PROFILE_DATA:{
@@ -206,7 +212,31 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
 }
 
 
-void *rrprof_server_thread(void *p)
+void llprof_message_dispatch(int sock)
+{
+    while(1)
+    {
+        char msg_buf[65536];
+        memset(msg_buf, 255, 65536);
+        if(recv_full(sock, (char *)msg, 8))
+            break;
+        int msg_id = msg[0];
+        int msg_sz = msg[1];
+        if(msg_sz >= sizeof(msg_buf))
+        {
+            printf("\nReceive: Message too large\n");
+            abort();
+        }
+        if(msg_sz > 0)
+            if(recv_full(sock, msg_buf, msg_sz))
+            {
+                return;
+            }
+        msg_handler(sock, msg_id, msg_sz, msg_buf);
+    }
+}
+
+void *llprof_server_thread(void *p)
 {
 	cout << "Server Thread Started." << endl;
 	int listening_sock;
@@ -253,48 +283,126 @@ void *rrprof_server_thread(void *p)
 		int msg[2];
 		struct sockaddr_in client_addr;
 		int len = sizeof(client_addr);
-        #ifdef PRINT_DEBUG
+        #ifdef LLPROF_DEBUG
 		printf("listening...\n");
         #endif
 		int sock = accept(listening_sock,  (struct sockaddr *)&client_addr, (socklen_t *)&len);
-        #ifdef PRINT_DEBUG
+        #ifdef LLPROF_DEBUG
 		printf("Connected\n");
         #endif
-		while(1)
-		{
-            char msg_buf[65536];
-            memset(msg_buf, 255, 65536);
-			if(recv_full(sock, (char *)msg, 8))
-				break;
-			int msg_id = msg[0];
-			int msg_sz = msg[1];
-            if(msg_sz >= sizeof(msg_buf))
-            {
-                printf("\nReceive: Message too large\n");
-                abort();
-            }
-            if(msg_sz > 0)
-                if(recv_full(sock, msg_buf, msg_sz))
-                {
-                    break;
-                }
-            msg_handler(sock, msg_id, msg_sz, msg_buf);
-		}
-        #ifdef PRINT_DEBUG
+        
+        llprof_message_dispatch(sock);
+
+        #ifdef LLPROF_DEBUG
         printf("Disconnected\n");
         #endif
 	}
-    
 #   ifdef _WIN32
         WSACleanup();
 #   endif
-
 }
 
 
-void start_server()
+
+
+int socket_connect_to(string host, string service)
+{
+	struct addrinfo hints, *res0;
+	memset(&hints, 0, sizeof(hints));
+	hints.ai_socktype = SOCK_STREAM;
+	hints.ai_family = PF_UNSPEC;
+	int err;
+	if((err = getaddrinfo(host.c_str(), service.c_str(), &hints, &res0)) != 0)
+	{
+		return -1;
+	}
+
+	for(addrinfo *res = res0; res != NULL; res = res->ai_next)
+	{
+		int sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+		if(sock < 0)
+			continue;
+		if(connect(sock, res->ai_addr, res->ai_addrlen) != 0)
+		{
+			close(sock);
+			continue;
+		}
+	}
+	// if(sock == -1) not connected
+
+	freeaddrinfo(res0);
+    return sock;
+}
+
+
+void *llprof_aggressive_thread(void *p)
+{
+#   ifdef _WIN32
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2,0), &wsaData);
+#   endif
+
+    string host, port;
+    int interval = 0;
+    if(!getenv("LLPROF_AGG_HOST") || strlen(getenv("LLPROF_AGG_HOST")) == 0)
+    {
+        return NULL;
+    }
+    host = getenv("LLPROF_AGG_HOST");
+
+    if(getenv("LLPROF_AGG_PORT"))
+        port = getenv("LLPROF_AGG_PORT");
+    else
+        port = "12300";
+    
+    if(getenv("LLPROF_AGG_INTERVAL"))
+    {
+        interval = atoi(getenv("LLPROF_AGG_INTERVAL"));
+        if(interval < 4)
+            interval = 4;
+    } else
+    {
+        interval = 60;
+    }
+    
+
+    sleep(2);
+    while(true)
+    {
+        int sock = socket_connect_to(host, port);
+        if(sock != -1)
+        {
+            cout << "Aggressive Thread: connected" << endl;
+            llprof_message_dispatch(sock);
+            cout << "Aggressive Thread: diconnected" << endl;
+        }
+        sleep(interval);
+    }
+
+#   ifdef _WIN32
+        WSACleanup();
+#   endif
+}
+
+void llprof_start_server()
 {
     pthread_create(&gServerThread, NULL, rrprof_server_thread, NULL);
     pthread_detach(gServerThread);
+
 }
 
+void llprof_start_aggressive_thread()
+{
+    pthread_create(&g_aggressive_thread, NULL, rrprof_aggressive_thread, NULL);
+    pthread_detach(g_aggressive_thread);
+}
+
+void llprof_set_target_name(const string &name)
+{
+    g_profile_target_name = name;
+}
+
+string llprof_get_target_name()
+{
+    return g_profle_target_name;
+}

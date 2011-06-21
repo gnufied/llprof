@@ -112,6 +112,7 @@ public class MonitorGUI extends JFrame implements ActionListener, MouseListener 
 
 		timer = new Timer();
 		timer.schedule(new ProfileTimer(), 0, 500);
+		timer.schedule(new RedrawTimer(), 0, 500);
 	}
 
 	
@@ -136,6 +137,7 @@ public class MonitorGUI extends JFrame implements ActionListener, MouseListener 
 		MonitorBrowser b = new MonitorBrowser();
 		browserListModel.addElement(b);
 		browserList.repaint();
+		
 		return b;
 	}
 
@@ -145,6 +147,7 @@ public class MonitorGUI extends JFrame implements ActionListener, MouseListener 
 			rootPane.setRightComponent(b);
 			rootPane.repaint();
 			currentBrowser = b;
+			browserList.repaint();
 		}
 	}
 	
@@ -166,10 +169,12 @@ public class MonitorGUI extends JFrame implements ActionListener, MouseListener 
 			int selected = filechooser.showSaveDialog(this);
 			if (selected == JFileChooser.APPROVE_OPTION) {
 				File file = filechooser.getSelectedFile();
-				currentBrowser.getMonitor().getDataStore().exportXML(file.getName());
+				currentBrowser.getMonitor().getDataStore().exportXML(file.getAbsolutePath());
+				currentBrowser.writeLog("Exported: " + file.getAbsolutePath());
 			} else if (selected == JFileChooser.CANCEL_OPTION) {
+				currentBrowser.writeLog("Export cancelled");
 			} else if (selected == JFileChooser.ERROR_OPTION) {
-				System.out.println("Error: Open dialog");
+				currentBrowser.writeLog("Error: Open dialog");
 			}
 
 		} else if (e.getActionCommand() == "browser.disconnect") {
@@ -192,13 +197,21 @@ public class MonitorGUI extends JFrame implements ActionListener, MouseListener 
 		MonitorBrowser b = newBrowser();
 		b.connect(host, port, interval);
 		setActiveBrowser(b);
-		browserList.repaint();
+		
 	}
 
 	class ProfileTimer extends TimerTask {
 		public void run() {
 			if(currentBrowser != null)
 				currentBrowser.updateProfiler();
+		}
+	}
+
+
+	class RedrawTimer extends TimerTask {
+		public void run() {
+			if(currentBrowser != null)
+				currentBrowser.redraw();
 		}
 	}
 

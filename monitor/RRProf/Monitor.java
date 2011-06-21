@@ -33,8 +33,12 @@ class Monitor {
 
 	long allTime;
 	long allCount;
-
+	long monitor_id;
+	static long monitor_id_counter = 0;
+	
+	
 	Monitor() {
+		monitor_id = monitor_id_counter++;
 		dataStore = new DataStore();
 		name_id_map_ = new HashMap<Long, String>();
 		dataStore.setNameMap(name_id_map_);
@@ -44,6 +48,11 @@ class Monitor {
 		outputSize = 0;
 	}
 
+	public String getMID() {
+		return Long.toString(monitor_id);
+	}
+	
+	
 	public long getInputSize() {
 		return inputSize;
 	}
@@ -63,10 +72,13 @@ class Monitor {
 	}
 
 	public ByteBuffer recv(int len) throws IOException {
+		assert len > 0;
 		ByteBuffer buf = ByteBuffer.allocate(len);
 		int offset = 0;
 		while (true) {
 			int readsz = input.read(buf.array(), offset, len - offset);
+			if(readsz <= 0)
+				return null;
 			offset += readsz;
 			if (offset >= len)
 				break;
@@ -99,19 +111,27 @@ class Monitor {
 			this.sock = null;
 			return false;
 		}
+		System.out.println("Socket Open (MID:" + getMID() + ")");
 
 		return true;
 	}
 
 	public MessageBase recvResponse() throws IOException {
 		ByteBuffer recvbuf = recv(8);
+		if(recvbuf == null)
+			return null;
 		recvbuf.order(ByteOrder.LITTLE_ENDIAN);
 		int msgid = recvbuf.getInt();
 		int msgsz = recvbuf.getInt();
 
-		ByteBuffer msg_recvbuf = recv(msgsz);
-		msg_recvbuf.order(ByteOrder.LITTLE_ENDIAN);
-
+		ByteBuffer msg_recvbuf = null;
+		if(msgsz > 0)
+		{
+			msg_recvbuf = recv(msgsz);
+			if(msg_recvbuf == null)
+				return null;
+			msg_recvbuf.order(ByteOrder.LITTLE_ENDIAN);
+		}
 		MessageBase recvmsg = MessageBase.fromBuffer(msgid, msg_recvbuf);
 		return recvmsg;
 	}
@@ -135,6 +155,7 @@ class Monitor {
 				e.printStackTrace();
 			}
 		}
+		System.out.println("Socket Closed (MID:" + getMID() + ")");
 		sock = null;
 	}
 
@@ -155,6 +176,11 @@ class Monitor {
 			MessageBase rmsg;
 			try {
 				rmsg = recvResponse();
+				if(rmsg == null)
+				{
+					close();
+					return null;
+				}
 			} catch (IOException e) {
 				close();
 				return null;
@@ -252,7 +278,6 @@ class Monitor {
 					.getLong(i, "nameid"), getNameFromID(currentProfileData
 					.getLong(i, "nameid")), currentProfileData.getLong(i,
 					"all_time"),
-					currentProfileData.getLong(i, "children_time"),
 					currentProfileData.getLong(i, "call_count"));
 
 			System.out.println();

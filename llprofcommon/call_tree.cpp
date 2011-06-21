@@ -21,11 +21,12 @@
 
 using namespace std;
 
+// #define LLPROF_DEBUG
 
 //int gDefaultNodeInfoTableSize = 65536;
 //int gDefaultSerializedNodeInfoTableSize = 65536;
-int gDefaultNodeInfoTableSize = 16;
-int gDefaultSerializedNodeInfoTableSize = 16;
+int gDefaultNodeInfoTableSize = 1024;
+int gDefaultSerializedNodeInfoTableSize = 1024;
 int gDefaultSerializedStackInfoSize = 512;
 
 
@@ -80,7 +81,6 @@ struct StackInfo
     int node_id;
     time_val_t start_time;
 };
-
 
 #define ADD_SLIDE(struct_field, field_name_str)     { \
     slides[slide_idx].field_name = field_name_str; \
@@ -316,16 +316,6 @@ inline void get_current_node_info_pair(ThreadInfo *ti, MethodNodeInfo *&ninfo, M
     ninfo = GetNodeInfo(ti->CurrentCallNodeID);
 }
 
-inline void get_current_node_info_pair_with_parent(
-    ThreadInfo *ti,
-    MethodNodeInfo *&ninfo,
-    MethodNodeSerializedInfo *&sinfo,
-    MethodNodeSerializedInfo *&psinfo)
-{
-    sinfo = GetSerializedNodeInfo(ti->CurrentCallNodeID);
-    ninfo = GetNodeInfo(ti->CurrentCallNodeID);
-    psinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
-}
 */
 
 inline void get_current_node_info_pair(ThreadInfo *ti, MethodNodeInfo *&ninfo, MethodNodeSerializedInfo *&sinfo)
@@ -337,17 +327,6 @@ inline void get_current_node_info_pair(ThreadInfo *ti, MethodNodeInfo *&ninfo, M
     sinfo = &(*ti->SerializedNodeInfoArray)[ninfo->serialized_node_index];
     pthread_mutex_unlock(&ti->DataMutex);
 }
-
-inline void get_current_node_info_pair_with_parent(
-    ThreadInfo *ti,
-    MethodNodeInfo *&ninfo,
-    MethodNodeSerializedInfo *&sinfo,
-    MethodNodeSerializedInfo *&psinfo)
-{
-    get_current_node_info_pair(ti, ninfo, sinfo);
-    psinfo = GetSerializedNodeInfo(sinfo->parent_node_id);
-}
-
 
 
     
@@ -422,18 +401,16 @@ void llprof_return_handler()
 	ti->stop = 1;
     MethodNodeSerializedInfo *sinfo;
     MethodNodeInfo *ninfo;
-    MethodNodeSerializedInfo *parent_sinfo;
-    
 
-    get_current_node_info_pair_with_parent(ti, ninfo, sinfo, parent_sinfo);
+    get_current_node_info_pair(ti, ninfo, sinfo);
     
     time_val_t diff = NOW_TIME - ninfo->start_time;
     sinfo->all_time += diff;
 
     ti->CurrentCallNodeID = sinfo->parent_node_id;
+#ifdef LLPROF_DEBUG
     assert(ti->CurrentCallNodeID != 0);
-    parent_sinfo->children_time += diff;
-
+#endif
 
     pthread_mutex_lock(&ti->StackMutex);
     ti->SerializedStackArray->resize(ti->SerializedStackArray->size()-1);
@@ -507,21 +484,6 @@ void print_table()
 
 */
 
-void llprof_init()
-{
-    pthread_mutex_init(&gThreadDataMutex, NULL);
-    pthread_key_create(&gCurrentThreadKey, NULL);
-
-    gBackBuffer_SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
-    gBackBuffer_SerializedStackArray = new vector<StackInfo>();
-
-    cout << "[Init]"  << endl << "  pNodes = " << gBackBuffer_SerializedNodeInfoArray << endl;
-    cout << "  pStack = " << gBackBuffer_SerializedStackArray << endl;
-
-    get_current_thread();
-    start_server();
-   
-}
 
 
 
@@ -631,6 +593,14 @@ int BufferIteration_GetBufferType(ThreadIterator *iter)
 }
 
 
+void llprof_calltree_init()
+{
+    pthread_mutex_init(&gThreadDataMutex, NULL);
+    pthread_key_create(&gCurrentThreadKey, NULL);
 
+    gBackBuffer_SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
+    gBackBuffer_SerializedStackArray = new vector<StackInfo>();
+    get_current_thread();
+}
 
 

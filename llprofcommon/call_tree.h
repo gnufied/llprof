@@ -36,15 +36,22 @@ int BufferIteration_NextBuffer(ThreadIterator *iter);
 
 typedef unsigned long long nameid_t;
 
-
+// Public API
 void llprof_set_name_func(const char * cb(nameid_t, void *data_ptr));
 void llprof_set_time_func(time_val_t (*cb)());
+
+
+
 
 const char *llprof_call_name_func(nameid_t nameid, void *p);
 
 void llprof_call_handler(nameid_t id, void *name_info);
 void llprof_return_handler();
 
-void llprof_init();
+void llprof_calltree_init();
+
+
+
+//
 
 #endif

@@ -39,9 +39,13 @@
 // メッセージの要求
 #define MSG_QUERY_INFO 3
 //   構造体の各要素のメンバーのオフセット値の要求
-#   define INFO_DATA_SLIDE  1
+#   define INFO_DATA_SLIDE      1
+//   プロファイルターゲット名
+#   define INFO_PROFILE_TARGET  2
 // 返答: 構造体の各要素のメンバーのオフセット値
 #define MSG_SLIDE_INFO          5
+// 返答: プロファイルターゲット名
+#define MSG_PROFILE_TARGET      10
 
 // プロファイルメッセージの要求
 #define MSG_REQ_PROFILE_DATA    4    

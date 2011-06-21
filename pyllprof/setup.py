@@ -9,12 +9,13 @@ module1 = Extension(
         'measurement.cpp',
         'server.cpp',
         'windows_support.cpp',
+        'llprof.cpp',
     ],
     libraries = [
         "rt"
     ],
-    extra_compile_args = ["-g"],
-    extra_link_args = ["-g"],
+    extra_compile_args = ["-O3"],
+    extra_link_args = ["-O3"],
 )
 
 setup (name = 'pyllprof',

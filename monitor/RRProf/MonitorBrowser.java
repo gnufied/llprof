@@ -1,6 +1,7 @@
 package RRProf;
 
 import java.awt.BorderLayout;
+import java.awt.Component;
 import java.awt.GridLayout;
 
 import javax.swing.JLabel;
@@ -50,12 +51,15 @@ public class MonitorBrowser extends JPanel {
 	StatisticField numRecordsField, numMethodsField, inputSizeField,
 			outputSizeField;
 
+	SquaresView squaresView;
+	
 	JTextArea logText;
 
 	MonitorBrowser() {
 		interval = 1000;
 	}
 
+	
 	public void reset() {
 		removeAll();
 
@@ -67,22 +71,29 @@ public class MonitorBrowser extends JPanel {
 			mon.close();
 		mon = null;
 		setLayout(new BorderLayout());
+		
+		browserPane = new JTabbedPane();
+
+		// コールツリーページ
 		callTreeBrowser = new CallTreeBrowserView();
 		callTreeBrowser.setMeasureMode("ms", 1000 * 1000);
 		JScrollPane ct_scrollPane = new JScrollPane();
 		ct_scrollPane.getViewport().setView(callTreeBrowser);
+		browserPane.add("Call Tree", ct_scrollPane);
 
+		// メソッドリストページ
 		methodBrowser = new MethodBrowser(this);
 		JScrollPane mb_scrollPane = new JScrollPane();
 		mb_scrollPane.getViewport().setView(methodBrowser);
-
-		browserPane = new JTabbedPane();
-		browserPane.add("Call Tree", ct_scrollPane);
 		browserPane.add("Method", mb_scrollPane);
 
+		// Squaresページ
+		squaresView = new SquaresView(this);
+		browserPane.add("Squares", squaresView);
+		
+		// 統計情報ページ
 		statisticsPane = new JPanel();
 		statisticsPane.setLayout(new GridLayout(10, 0));
-
 		browserPane.add("Profiler info", statisticsPane);
 
 		logText = new JTextArea();
@@ -141,6 +152,7 @@ public class MonitorBrowser extends JPanel {
 		writeLog("Trying to connect " + targetHost + ":"
 				+ Integer.toString(targetPort) + "...");
 		mon = new Monitor();
+		System.out.println("New mon MID:" + mon.getMID());
 		callTreeBrowser.setMonitor(mon);
 
 		methodBrowser.setMonitor(mon);
@@ -166,7 +178,7 @@ public class MonitorBrowser extends JPanel {
 		Monitor target_mon = mon; // 途中で切断された場合でも正常にできるように値をコピーしておく
 		if (target_mon != null && target_mon.isConnected()) {
 			if(target_mon.getProfileData() == null) {
-				writeLog("Error: Disconnected");
+				writeLog("Error: Disconnected (MID:" + target_mon.getMID() + ")");
 			}
 
 			numRecordsField.setLong(target_mon.getDataStore().numAllNodes());
@@ -176,6 +188,17 @@ public class MonitorBrowser extends JPanel {
 		}
 	}
 
+	public void redraw() {
+		try{
+			SquaresView view = (SquaresView)browserPane.getSelectedComponent();
+			if(view != null)
+				view.repaint();
+		}catch(ClassCastException e)
+		{
+			// do nothing
+		}
+	}
+	
 	public boolean isConnected() {
 		return mon != null && mon.isConnected();
 	}
