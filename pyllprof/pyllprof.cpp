@@ -7,7 +7,7 @@
 #include <string>
 using namespace std;
 
-#include "measurement.h"
+#include "llprof.h"
 
 
 static PyObject * minit(PyObject *self, PyObject *args)

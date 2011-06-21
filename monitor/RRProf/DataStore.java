@@ -56,6 +56,10 @@ public class DataStore {
 
 		abstract public String getRecordName();
 
+		public String getTargetName() {
+			return "<error>";
+		}
+
 		AbstractRecord() {
 			listeners = new HashSet<RecordEventListener>();
 		}
@@ -135,6 +139,26 @@ public class DataStore {
 			runningTime = 0;
 		}
 
+		public String getPathString() {
+			return getPathString(-1);
+		}
+		public String getPathString(int maxnodes) {
+			String result = getTargetName();
+			Record current = this.getParent();
+			while(current != null) {
+				maxnodes--;
+				if(maxnodes == 1) {
+					while(current.getParent() != null)
+						current = current.getParent();
+					result = current.getTargetName() + " > ... > " + result;
+					break;
+				}
+				result = current.getTargetName() + " > " + result;
+				current = current.getParent();
+			}
+			return result;
+		}
+		
 		public void exportXML(Document doc, Element parent_elem) {
 			Element elem = doc.createElement("node");
 			elem.setAttribute("id", Long.toString(ID));

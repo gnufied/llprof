@@ -25,6 +25,8 @@ class Monitor {
 	DataInputStream input;
 	DataOutputStream output;
 	long inputSize, outputSize;
+	String profileTargetName;
+	boolean active, aggressiveMode;
 
 	DataStore dataStore;
 	SlideInfo slide_info;
@@ -33,12 +35,9 @@ class Monitor {
 
 	long allTime;
 	long allCount;
-	long monitor_id;
-	static long monitor_id_counter = 0;
 	
 	
 	Monitor() {
-		monitor_id = monitor_id_counter++;
 		dataStore = new DataStore();
 		name_id_map_ = new HashMap<Long, String>();
 		dataStore.setNameMap(name_id_map_);
@@ -46,12 +45,13 @@ class Monitor {
 		allCount = 0;
 		inputSize = 0;
 		outputSize = 0;
-	}
-
-	public String getMID() {
-		return Long.toString(monitor_id);
+		active = false;
+		aggressiveMode = false;
 	}
 	
+	public String getProfileTargetName() {
+		return profileTargetName;
+	}
 	
 	public long getInputSize() {
 		return inputSize;
@@ -87,31 +87,60 @@ class Monitor {
 		return buf;
 	}
 
-	public boolean isConnected() {
-		return this.sock != null;
+	public boolean isActive() {
+		return active;
 	}
 
+	
+	void getInitialInfoFromSocket() throws IOException {
+		// 構造体情報の取得
+		QueryInfo ri_msg = new QueryInfo();
+		ri_msg.setInfoType(QueryInfo.INFO_DATA_SLIDE);
+		slide_info = (SlideInfo) sendRequestAndReceiveResponse(ri_msg);
+
+		// プロファイルターゲット名の取得
+		ri_msg = new QueryInfo();
+		ri_msg.setInfoType(QueryInfo.INFO_PROFILE_TARGET);
+		ProfileTarget nameinfo = (ProfileTarget) sendRequestAndReceiveResponse(ri_msg);
+		profileTargetName = nameinfo.getName();
+	}
+
+	public void setAggressive(Socket sock) {
+		try {
+			aggressiveMode = true;
+			this.sock = sock;
+			this.input = new DataInputStream(sock.getInputStream());
+			this.output = new DataOutputStream(sock.getOutputStream());
+			getInitialInfoFromSocket();
+		} catch (IOException e) {
+			this.sock = null;
+		}
+
+	}
+	
+	public void startProfileAggressive() {
+		active = true;
+	}
+	
+	
 	public boolean startProfile(String server, int port) {
 		this.port = port;
 		this.server = server;
 		try {
 			this.sock = new Socket(server, port);
+			active = true;
 			this.input = new DataInputStream(sock.getInputStream());
 			this.output = new DataOutputStream(sock.getOutputStream());
 			StartProfile msg = new StartProfile();
 			msg.setProfileType(StartProfile.CALL_TREE);
 			sendRequestAndReceiveResponse(msg);
 
-			QueryInfo ri_msg = new QueryInfo();
-			ri_msg.setInfoType(QueryInfo.INFO_DATA_SLIDE);
-			SlideInfo slide_info = (SlideInfo) sendRequestAndReceiveResponse(ri_msg);
-			this.slide_info = slide_info;
-			slide_info.printSlideInfo();
+			getInitialInfoFromSocket();
 		} catch (IOException e) {
 			this.sock = null;
+			active = false;
 			return false;
 		}
-		System.out.println("Socket Open (MID:" + getMID() + ")");
 
 		return true;
 	}
@@ -155,12 +184,14 @@ class Monitor {
 				e.printStackTrace();
 			}
 		}
-		System.out.println("Socket Closed (MID:" + getMID() + ")");
+		input = null;
+		output = null;
 		sock = null;
+		active = false;
 	}
 
 	public ProfileData getProfileData() {
-		if (!isConnected())
+		if (!isActive())
 			return null;
 		ProfileData ret = null;
 		ArrayList<QueryNames> query_names_list = null;
@@ -171,7 +202,7 @@ class Monitor {
 			close();
 			return null;
 		}
-		// System.out.println("getProfileData");
+
 		while (true) {
 			MessageBase rmsg;
 			try {

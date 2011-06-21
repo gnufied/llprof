@@ -3,6 +3,7 @@ package RRProf;
 import java.awt.BorderLayout;
 import java.awt.Component;
 import java.awt.GridLayout;
+import java.net.Socket;
 
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -52,16 +53,33 @@ public class MonitorBrowser extends JPanel {
 			outputSizeField;
 
 	SquaresView squaresView;
-	
 	JTextArea logText;
+	MonitorGUI parent;
 
-	MonitorBrowser() {
+	boolean aggressive;
+	boolean prepared;
+	
+	MonitorBrowser(MonitorGUI parent) {
+		this.parent = parent;
 		interval = 1000;
+		aggressive = false;
+		prepared = false;
 	}
 
+	public CallTreeBrowserView getCallTreeBrowser() {
+		return callTreeBrowser;
+	}
+	
+	
+	public JScrollPane scrollCallTreeBrowser;
 	
 	public void reset() {
+		prepared = false;
 		removeAll();
+		
+		String old_log_text = "[Log]\n";
+		if(logText != null)
+			old_log_text = logText.getText();
 
 		if (methodBrowser != null)
 			methodBrowser.close();
@@ -77,9 +95,9 @@ public class MonitorBrowser extends JPanel {
 		// コールツリーページ
 		callTreeBrowser = new CallTreeBrowserView();
 		callTreeBrowser.setMeasureMode("ms", 1000 * 1000);
-		JScrollPane ct_scrollPane = new JScrollPane();
-		ct_scrollPane.getViewport().setView(callTreeBrowser);
-		browserPane.add("Call Tree", ct_scrollPane);
+		scrollCallTreeBrowser = new JScrollPane();
+		scrollCallTreeBrowser.getViewport().setView(callTreeBrowser);
+		browserPane.add("Call Tree", scrollCallTreeBrowser);
 
 		// メソッドリストページ
 		methodBrowser = new MethodBrowser(this);
@@ -98,13 +116,19 @@ public class MonitorBrowser extends JPanel {
 
 		logText = new JTextArea();
 		logText.setEditable(false);
+		logText.setText(old_log_text);
+
 		viewerPane = new JTabbedPane();
 		viewerPane.add("Log", new JScrollPane(logText));
 
 		JSplitPane sp = new JSplitPane(JSplitPane.VERTICAL_SPLIT);
 		sp.setDividerSize(5);
-		sp.setLeftComponent(browserPane);
-		sp.setRightComponent(viewerPane);
+		sp.add(viewerPane, JSplitPane.BOTTOM);
+		sp.add(browserPane, JSplitPane.TOP);
+		sp.setResizeWeight(1);
+		
+		// sp.setLeftComponent(browserPane);
+		// sp.setRightComponent(viewerPane);
 
 		add(sp);
 		numRecordsField = addStatisticsField("numRecords", "Number of records",
@@ -119,7 +143,7 @@ public class MonitorBrowser extends JPanel {
 		invalidate();
 		validate();
 		repaint();
-
+		System.out.println("Browser Reset");
 	}
 
 	public void writeLog(String s) {
@@ -146,45 +170,91 @@ public class MonitorBrowser extends JPanel {
 		return field;
 
 	}
-
-	public void connect() {
-		reset();
-		writeLog("Trying to connect " + targetHost + ":"
-				+ Integer.toString(targetPort) + "...");
+	
+	void newMonitor() {
 		mon = new Monitor();
-		System.out.println("New mon MID:" + mon.getMID());
 		callTreeBrowser.setMonitor(mon);
-
 		methodBrowser.setMonitor(mon);
-		mon.startProfile(targetHost, targetPort);
-		if (mon.isConnected()) {
-			writeLog("Connected");
-
-		} else {
-			writeLog("Error: Failed to connect");
-			mon = null;
+	}
+	public void startProfile() {
+		if(!prepared)
+		{
+			writeLog("Not prepared");
+			return;
+		}
+		prepared = false;
+		if(aggressive)
+		{
+			mon.startProfileAggressive();
+			return;
+		}
+		else{
+			writeLog("Trying to connect " + targetHost + ":"
+					+ Integer.toString(targetPort) + "...");
+	
+			newMonitor();
+			mon.startProfile(targetHost, targetPort);
+			if (mon.isActive()) {
+				writeLog("Connected");
+	
+			} else {
+				writeLog("Error: Failed to connect");
+				mon = null;
+			}
 		}
 		repaint();
 	}
-
-	public void connect(String host, int port, int iv) {
-		targetHost = host;
-		targetPort = port;
-		this.interval = iv;
-		connect();
+	public void close() {
+		prepared = false;
+		if(mon != null)
+			mon.close();
 	}
 
-	public void updateProfiler() {
-		Monitor target_mon = mon; // 途中で切断された場合でも正常にできるように値をコピーしておく
-		if (target_mon != null && target_mon.isConnected()) {
-			if(target_mon.getProfileData() == null) {
-				writeLog("Error: Disconnected (MID:" + target_mon.getMID() + ")");
-			}
+	public void preparePassive(String host, int port, int iv) {
+		targetHost = host;
+		targetPort = port;
+		interval = iv;
+		reset();
+		parent.updateBrowserList();
+		prepared = true;
+	}
+	public void prepareAgain() {
+		if(aggressive)
+			return;
+		reset();
+		if(targetHost != null)
+			prepared = true;
+	}
 
-			numRecordsField.setLong(target_mon.getDataStore().numAllNodes());
-			numMethodsField.setLong(target_mon.getDataStore().numCallNames());
-			inputSizeField.setLong(target_mon.getInputSize());
-			outputSizeField.setLong(target_mon.getOutputSize());
+	public void prepareAggressive(Socket sock) {
+		reset();
+		aggressive = true;
+		newMonitor();
+		mon.setAggressive(sock);
+		parent.updateBrowserList();
+		prepared = true;
+	}
+
+
+	
+	public void updateProfiler() {
+		methodBrowser.setUpdateMode(true);
+		try{
+			Monitor target_mon = mon; // 途中で切断された場合でも正常にできるように値をコピーしておく
+			if (target_mon != null && target_mon.isActive()) {
+				if(target_mon.getProfileData() == null) {
+					writeLog("Error: Disconnected");
+				}
+	
+				numRecordsField.setLong(target_mon.getDataStore().numAllNodes());
+				numMethodsField.setLong(target_mon.getDataStore().numCallNames());
+				inputSizeField.setLong(target_mon.getInputSize());
+				outputSizeField.setLong(target_mon.getOutputSize());
+			}
+			parent.updateBrowserList();
+		}
+		finally{
+			methodBrowser.setUpdateMode(false);
 		}
 	}
 
@@ -199,21 +269,38 @@ public class MonitorBrowser extends JPanel {
 		}
 	}
 	
-	public boolean isConnected() {
-		return mon != null && mon.isConnected();
+	public boolean isActive() {
+		return mon != null && mon.isActive();
 	}
 
 	public String getListLabel() {
-		if (targetHost != null && targetPort != 0) {
-			String label = targetHost + ":" + Integer.toString(targetPort);
-			if (isConnected()) {
-				label = label + " (Connected)";
+		if(aggressive) {
+			String label;
+			label = mon.getProfileTargetName();
+			if(mon.isActive()){
+				label += " [Active]";
+			}
+			return label;
+		}
+		else if (targetHost != null && targetPort != 0) {
+			String label;
+			if(mon != null)
+				label = mon.getProfileTargetName() + "(" + targetHost + ")";
+			else
+				label = targetHost;
+			if (isActive()) {
+				label = label + " [Active]";
 			} else {
 				label = label + "";
 			}
 			return label;
 		}
 		return "<browser>";
+	}
+
+
+	public boolean isAggressive() {
+		return aggressive;
 	}
 
 }

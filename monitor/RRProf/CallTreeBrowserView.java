@@ -1,6 +1,7 @@
 package RRProf;
 
 import java.awt.Component;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.awt.event.KeyListener;
 import java.util.ArrayList;
@@ -396,7 +397,13 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 		if(e.getKeyCode() == KeyEvent.VK_F5)
 		{
 			System.out.println("Refresh!!");
+			TreePath selected = getSelectionPath();
 			((CallTreeBrowserModel)this.getModel()).reload();
+			
+			scrollPathToVisible(selected);
+			setSelectionPath(selected);
+			
+			
 		}
 	}
 
@@ -411,7 +418,17 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 	static final int OTM_ACTIVE = 1;
 	static final int OTM_BOTTLENECK = 2;
 
+	public void openTree(Record record){
+		
+	}
+
+	public void openTree(TreePath path){
+		scrollPathToVisible(path);
+		setSelectionPath(path);
+	}
+
 	public void openTree(int open_mode){
+		((CallTreeBrowserModel)this.getModel()).reload();
 		RootNode tree_root = ((RootNode)model.getRoot());
 		int nThreads = tree_root.getChildCount();
 		for(int i = 0; i < nThreads; i++)
@@ -453,11 +470,9 @@ public class CallTreeBrowserView extends JTree implements KeyListener {
 				path.add(next);
 				node = next;
 			}
-			TreePath tpath = new TreePath(path.toArray());
-			this.expandPath(tpath);
-			this.setSelectionPath(tpath);
+			openTree(new TreePath(path.toArray()));
+			return;
 		}
-		
 	}
 	
 }

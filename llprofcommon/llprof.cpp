@@ -1,9 +1,10 @@
 
 #include "llprof.h"
 #include <string>
+#include <cstdlib>
 using namespace std;
 
-bool g_aggressive_mode = false;
+bool g_aggressive_mode = true;
 
 void llprof_init()
 {

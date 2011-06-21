@@ -25,34 +25,33 @@ import RRProf.DataStore.AbstractRecord;
 import RRProf.DataStore.CallName;
 import RRProf.DataStore.CallNameRecordSet;
 
-public class RecordListView extends JTable implements ListSelectionListener{
+public class RecordListView extends JTable implements ListSelectionListener {
 
-	
 	static final int COL_RUNNING_ICON = 1;
 	static final int COL_NODENAME = 2;
 	static final int COL_ALL_TIME = 3;
 	static final int COL_SELF_TIME = 4;
 	static final int COL_NUM_NODES = 5;
 	static final int COL_NUM_CALLS = 6;
-	
+
 	ArrayList<Integer> columns;
-	
-	class MethodTableModel implements TableModel{
+
+	class MethodTableModel implements TableModel {
 		Set<TableModelListener> listeners;
 		Icon runningIcon, normalIcon;
-		public MethodTableModel()
-		{
+
+		public MethodTableModel() {
 			listeners = new HashSet<TableModelListener>();
 			runningIcon = new ImageIcon("icons/running.png");
 			normalIcon = new ImageIcon("icons/normal.png");
 		}
-		
+
 		public void addTableModelListener(TableModelListener l) {
 			listeners.add(l);
 		}
 
 		public Class<?> getColumnClass(int columnIndex) {
-			switch(columns.get(columnIndex)) {
+			switch (columns.get(columnIndex)) {
 			case COL_RUNNING_ICON:
 				return Icon.class;
 			case COL_NODENAME:
@@ -76,13 +75,19 @@ public class RecordListView extends JTable implements ListSelectionListener{
 
 		@Override
 		public String getColumnName(int columnIndex) {
-			switch(columns.get(columnIndex)) {
-			case COL_RUNNING_ICON:	return "Run";
-			case COL_NODENAME:			return "Name";
-			case COL_ALL_TIME:		return "AllTime";
-			case COL_SELF_TIME:		return "SelfTime";
-			case COL_NUM_NODES:	return "numRecords";
-			case COL_NUM_CALLS:	return "numCalls";
+			switch (columns.get(columnIndex)) {
+			case COL_RUNNING_ICON:
+				return "Run";
+			case COL_NODENAME:
+				return "Name";
+			case COL_ALL_TIME:
+				return "AllTime";
+			case COL_SELF_TIME:
+				return "SelfTime";
+			case COL_NUM_NODES:
+				return "numRecords";
+			case COL_NUM_CALLS:
+				return "numCalls";
 			}
 			return "!!";
 		}
@@ -94,14 +99,14 @@ public class RecordListView extends JTable implements ListSelectionListener{
 
 		@Override
 		synchronized public Object getValueAt(int rowIndex, int columnIndex) {
-			AbstractRecord rec = (AbstractRecord)call_name_idx.get(rowIndex);
-			if(rec == null)
+			AbstractRecord rec = (AbstractRecord) call_name_idx.get(rowIndex);
+			if (rec == null)
 				return "";
-			switch(columns.get(columnIndex)) {
+			switch (columns.get(columnIndex)) {
 			case COL_RUNNING_ICON:
 				return rec.isRunning() ? runningIcon : normalIcon;
 			case COL_NODENAME:
-				return rec.getRecordName();
+				return rec.getTargetName();
 			case COL_ALL_TIME:
 				return rec.getAllTime();
 			case COL_SELF_TIME:
@@ -126,101 +131,125 @@ public class RecordListView extends JTable implements ListSelectionListener{
 
 		@Override
 		public void setValueAt(Object aValue, int rowIndex, int columnIndex) {
-			
+
 		}
-		public void callInsertEvent(AbstractRecord rec)
-		{
+
+		public void callInsertEvent(AbstractRecord rec) {
 			Integer idx = call_name_idx_rev.get(rec);
 			TableModelEvent e;
-			assert(idx != null);
-			e = new TableModelEvent(this, idx, idx, TableModelEvent.ALL_COLUMNS, TableModelEvent.INSERT);
-			
+			assert (idx != null);
+			e = new TableModelEvent(this, idx, idx,
+					TableModelEvent.ALL_COLUMNS, TableModelEvent.INSERT);
+
 			callChangedEvent(e);
 		}
-		
-		public void callChangedEvent(AbstractRecord rec)
-		{
+
+		public void callChangedEvent(AbstractRecord rec) {
 			Integer idx = call_name_idx_rev.get(rec);
 			TableModelEvent e;
-			if(idx == null)
+			if (idx == null)
 				e = new TableModelEvent(this);
 			else
 				e = new TableModelEvent(this, idx);
-			
+
 			callChangedEvent(e);
 		}
 
-		synchronized public void callChangedEvent(TableModelEvent e)
-		{
-			for(TableModelListener l: listeners)
-			{
+		synchronized public void callChangedEvent(TableModelEvent e) {
+			for (TableModelListener l : listeners) {
 				l.tableChanged(e);
 			}
 		}
+
 		public void updateColumn() {
-			callChangedEvent(new TableModelEvent(this, TableModelEvent.HEADER_ROW));
+			callChangedEvent(new TableModelEvent(this,
+					TableModelEvent.HEADER_ROW));
 		}
 
 	}
-	
+
 	int numRows;
-	
+
 	Map<Integer, AbstractRecord> call_name_idx;
 	Map<AbstractRecord, Integer> call_name_idx_rev;
 	MethodTableModel model;
-	public RecordListView()
-	{
+
+	RecordListView() {
 		super();
 		columns = new ArrayList<Integer>();
 		call_name_idx = new HashMap<Integer, AbstractRecord>();
 		call_name_idx_rev = new HashMap<AbstractRecord, Integer>();
 		model = new MethodTableModel();
-		
+
 		setModel(model);
 		setAutoCreateRowSorter(true);
-		 numRows = 0;
-		 
+		numRows = 0;
+		updateMode = false;
 	}
-	
+
 	public void updateColumn() {
 		model.updateColumn();
 	}
-	
+
 	public int getRowCount() {
 		return numRows;
 	}
-	public void addRecord(AbstractRecord rec){
-		synchronized(model)
-		{
-			assert(!call_name_idx_rev.containsKey(rec));
+
+	boolean updateMode;
+	HashSet<AbstractRecord> updatingRecords;
+
+	public void setUpdateMode(boolean stop) {
+		if(stop) {
+			updateMode = false;
+			if(updatingRecords == null)
+			{
+				updatingRecords = new HashSet<AbstractRecord>();
+			}
+		}
+		else {
+			updateMode = true;
+			synchronized (model) {
+				for(AbstractRecord rec: updatingRecords) {
+					model.callChangedEvent(rec);
+				}
+			}
+		}
+	}
+
+	public void addRecord(AbstractRecord rec) {
+		synchronized (model) {
+			assert (!call_name_idx_rev.containsKey(rec));
 			call_name_idx.put(call_name_idx.size(), rec);
 			call_name_idx_rev.put(rec, call_name_idx_rev.size());
-			assert(call_name_idx.size() == call_name_idx_rev.size());
+			assert (call_name_idx.size() == call_name_idx_rev.size());
 			numRows++;
 			model.callInsertEvent(rec);
 		}
 	}
 
 	public void recordChanged(AbstractRecord rec) {
-		synchronized(model)
+		if(!updateMode)
+			updatingRecords.add(rec);
+		else
 		{
-			model.callChangedEvent(rec);
+			synchronized (model) {
+				model.callChangedEvent(rec);
+			}
 		}
 	}
 
-	
 	public void valueChanged(ListSelectionEvent e) {
-	    // if(e.getValueIsAdjusting()) return;
+		// if(e.getValueIsAdjusting()) return;
 
-	    // DataStore.RecordSet recset = (DataStore.RecordSet)call_name_idx.get(e.getFirstIndex());
-	    
+		// DataStore.RecordSet recset =
+		// (DataStore.RecordSet)call_name_idx.get(e.getFirstIndex());
+
 	}
 
 	public AbstractRecord getRecordAt(Point pt) {
 		int row = convertRowIndexToModel(rowAtPoint(pt));
 		return call_name_idx.get(row);
-		
-	}
 
+	}
 
 }

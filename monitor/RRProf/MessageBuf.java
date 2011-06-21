@@ -8,8 +8,6 @@ import java.nio.charset.*;
 class MessageTypes {
 	public final static int MSG_START_PROFILE = 2;
 	public final static int MSG_QUERY_INFO = 3;
-	public final static int INFO_DATA_SLIDE = 1;
-	public final static int INFO_PROFILE_TARGET = 2;
 
 	public final static int MSG_REQ_PROFILE_DATA = 4;
 	public final static int MSG_SLIDE_INFO = 5;
@@ -110,6 +108,7 @@ class StartProfile extends MessageBase {
 
 class QueryInfo extends MessageBase {
 	public final static int INFO_DATA_SLIDE = 1;
+	public final static int INFO_PROFILE_TARGET = 2;
 
 	int infoType;
 

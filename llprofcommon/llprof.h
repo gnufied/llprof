@@ -1,6 +1,7 @@
 #ifndef LLPROF_H
 #define LLPROF_H
 
+#include <string>
 #include "llprof_const.h"
 #include "call_tree.h"
 #include "class_table.h"

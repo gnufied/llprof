@@ -156,8 +156,10 @@ struct ThreadInfo
         SerializedNodeInfoArray = new vector<MethodNodeSerializedInfo>();
         SerializedStackArray = new vector<StackInfo>();
 
+#ifdef LLPROF_DEBUG
         cout << "[NewThread]"  << endl << "  pNodes = " << SerializedNodeInfoArray << endl;
         cout << "  pStack = " << SerializedStackArray << endl;
+#endif
 
         NodeInfoArray.reserve(gDefaultNodeInfoTableSize);
         SerializedNodeInfoArray->reserve(gDefaultSerializedNodeInfoTableSize);
@@ -178,9 +180,6 @@ struct ThreadInfo
 
         next = NULL;
 
-        #ifdef PRINT_DEBUG
-            printf("New thread %lld\n", thread_id);
-        #endif
     }
 
     unsigned int AddCallNode(unsigned int parent_node_id, nameid_t nameid, void *name_data_ptr);
