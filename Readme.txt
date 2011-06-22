@@ -1,16 +1,18 @@
 
-====== llprof version 0.2 ======
- 
+※ここの内容は以下のURLにあるものと同一の内容です。
+  http://sunagae.net/wiki/doku.php?id=software:llprof:doc
+
+====== llprof version 0.2 ドキュメント ======
 
 ====== ディレクトリ構成 ======
- pyllprof/              Python用プロファイリングモジュール   
-   setup.py             セットアップ用スクリプト
- rrprofext/             Ruby用プロファイリングモジュール
-   extconf.rb           Makefile生成スクリプト
- monitor/               モニタプログラムのディレクトリ
-   RRProf               モニタプログラムのソースコード
-   icons                モニタプログラムで使用される画像
- rrprof_monitor.jar     モニタプログラム本体
+  * pyllprof/              --- Python用プロファイリングモジュール   
+    * setup.py             --- セットアップ用スクリプト
+  * rrprofext/             --- Ruby用プロファイリングモジュール
+    * extconf.rb           --- Makefile生成スクリプト
+  * monitor/               --- モニタプログラムのディレクトリ
+    * RRProf               --- モニタプログラムのソースコード
+    * icons                --- モニタプログラムで使用される画像
+  * rrprof_monitor.jar     --- モニタプログラム本体
 
 
 ====== プロファイリングモジュールのコンパイル方法 ======
@@ -27,18 +29,22 @@ Ruby用もPython用も対応するモジュールを読み込ませることで
 
 ===== Ruby用モジュール =====
 本プロファイラモジュール(rrprof)をrequireしてください。
+
 一つの方法としては、環境変数RUBYOPTに-rオプションを指定して実行する方法があります。
 以下に実行例を示します。
+
 (本プロファイラ＋rdocの実行例)
+<code bash>
 $ export RUBYOPT="-r rrprof"
 $ rdoc
-
+</code>
 ====== モニタプログラムの使用方法 ======
 モニタプログラムは実行スクリプト (run_monitor.sh) を使用して起動してください。
 
 ===== プロファイリングモジュールへ接続する  =====
 メニューから「Connect」を選択し、プロファイリングモジュールを実行しているホストに対して接続することで
 情報の表示を開始することができます。
+
 モニタプログラムのソースコードはmonitorディレクトリ以下のRRProfにあります。
 
 ===== プロファイリングモジュールからの接続を受け付ける  =====
@@ -60,11 +66,12 @@ python3 program1.py
   * 現在はツリービューが更新されない不具合がある気がします。あやしいときはツリービューでF5キーを押すと全部更新されます
 
 
-
 ====== 環境変数一覧  ======
+^         変数名                ^                                         ^
+|LLPROF_PROFILE_TARGET_NAME     |プロファイルターゲット名                 |
+|LLPROF_AGG_HOST                |アグレッシブモード時の接続先ホスト名     |
+|LLPROF_AGG_PORT                |アグレッシブモード時の接続先ポート       |
+|LLPROF_AGG_INTERVAL            |アグレッシブモード時の接続時間間隔(秒)   |
 
-LLPROF_PROFILE_TARGET_NAME      プロファイルターゲット名
-LLPROF_AGG_HOST                 アグレッシブモード時の接続先ホスト名
-LLPROF_AGG_PORT                 アグレッシブモード時の接続先ポート
-LLPROF_AGG_INTERVAL             アグレッシブモード時の接続時間間隔(秒)
+
 
