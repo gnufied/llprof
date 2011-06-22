@@ -1,12 +1,13 @@
 
-
-
+import sys
+sys.path.append('../pyllprof')
 import pydoc
 import sys
 import os
 import pyllprof
 
+os.mkdir("pydocs")
 os.chdir("pydocs")
 
-pydoc.writedocs("../../../../python/python-3.2-src/Lib")
+pydoc.writedocs("/usr/lib/python3.1")
 
