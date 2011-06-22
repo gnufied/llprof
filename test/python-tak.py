@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+import sys
+sys.path.append('../pyllprof')
+
 import timeit
 
 def tak(x, y, z):
@@ -16,7 +19,7 @@ def main():
         t = timeit.Timer(stmt = f)
         print("Time", i, "=", t.timeit(number = 1))
 
-mode = "n"
+mode = "ll"
 if mode == "c":
 	import cProfile
 	cProfile.run("main()")
