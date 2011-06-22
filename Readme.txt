@@ -1,5 +1,6 @@
 
-* llprof - 軽量言語用プロファイラ
+* llprof version 0.2
+ 
 
 ** ディレクトリ構成
  pyllprof/              Python用プロファイリングモジュール   
