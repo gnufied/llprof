@@ -10,6 +10,7 @@ module1 = Extension(
         'server.cpp',
         'windows_support.cpp',
         'llprof.cpp',
+	'network.cpp',
     ],
     libraries = [
         "rt"

@@ -1,0 +1,49 @@
+
+*{
+    font-size: 13px;
+}
+
+body{
+    padding: 0;
+    margin: 1;
+}
+
+input{
+    font-size: 14px;
+
+}
+
+.panel{
+    border: 1px solid black;
+}
+
+
+#sidepanel{
+    width: 200px;
+    float: left;
+    border-right: none;
+}
+
+#mainpanel{
+    float: left;
+    width: auto;
+}
+
+
+.bottom{
+    clear: both;
+}
+
+
+
+/* sidepanel */
+#server_address{
+    width: 120px;
+}
+
+.tabs .item{
+    background-color: #EEEEEE;
+    margin: 1px;
+    float: left;
+}
+

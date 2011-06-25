@@ -26,42 +26,6 @@ pthread_t gServerThread;
 int g_aggressive_thread_started = 0;
 pthread_t g_aggressive_thread;
 
-int send_full(int sock, const char *pbuf, int sz)
-{
-    int offset = 0;
-    while(1)
-    {
-        int wrote_sz = send(sock, pbuf + offset, sz - offset, 0);
-        if(wrote_sz <= 0)
-            return 1;
-        offset += wrote_sz;
-        if(offset == sz)
-            return 0;
-        assert(offset < sz);
-    }    
-}
-
-int recv_full(int sock, char *pbuf, int sz)
-{
-    int offset = 0;
-    while(1)
-    {
-        int read_sz = recv(sock, pbuf + offset, sz - offset, 0);
-        if(read_sz <= 0)
-        {
-            if(read_sz != 0)
-            {
-                perror("read");
-            }
-            return 1;
-        }
-        offset += read_sz;
-        if(offset == sz)
-            return 0;
-        assert(offset < sz);
-    }
-}
-
 
 
 
@@ -74,11 +38,11 @@ void SendMessage2(int sock, int msg_id, const void *buf1, int buf_sz1, const voi
 {
     // printf("Send: type:%d  size:%d\n", msg_id, buf_sz);
     unsigned int msg[] = {msg_id, buf_sz1+buf_sz2};
-    send_full(sock, (const char *)msg, 8);
+    SendFull(sock, (const char *)msg, 8);
     if(buf_sz1 != 0)
-        send_full(sock, (const char *)buf1, buf_sz1);
+        SendFull(sock, (const char *)buf1, buf_sz1);
     if(buf_sz2 != 0)
-        send_full(sock, (const char *)buf2, buf_sz2);
+        SendFull(sock, (const char *)buf2, buf_sz2);
 }
 
 
@@ -224,7 +188,7 @@ void llprof_message_dispatch(int sock)
 		int msg[2];
         char msg_buf[65536];
         memset(msg_buf, 255, 65536);
-        if(recv_full(sock, (char *)msg, 8))
+        if(RecvFull(sock, (char *)msg, 8))
             break;
         int msg_id = msg[0];
         int msg_sz = msg[1];
@@ -234,7 +198,7 @@ void llprof_message_dispatch(int sock)
             abort();
         }
         if(msg_sz > 0)
-            if(recv_full(sock, msg_buf, msg_sz))
+            if(RecvFull(sock, msg_buf, msg_sz))
             {
                 return;
             }
@@ -308,40 +272,6 @@ void *llprof_server_thread(void *p)
 }
 
 
-
-
-int socket_connect_to(string host, string service)
-{
-	struct addrinfo hints, *res0;
-	memset(&hints, 0, sizeof(hints));
-	hints.ai_socktype = SOCK_STREAM;
-	hints.ai_family = PF_UNSPEC;
-	int err;
-	if((err = getaddrinfo(host.c_str(), service.c_str(), &hints, &res0)) != 0)
-	{
-		return -1;
-	}
-
-    int sock = -1;
-	for(addrinfo *res = res0; res != NULL; res = res->ai_next)
-	{
-		sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-		if(sock < 0)
-			continue;
-		if(connect(sock, res->ai_addr, res->ai_addrlen) != 0)
-		{
-			close(sock);
-            sock = -1;
-			continue;
-		}
-	}
-	// if(sock == -1) not connected
-
-	freeaddrinfo(res0);
-    return sock;
-}
-
-
 void *llprof_aggressive_thread(void *p)
 {
     cout << "Aggressive Thread: Start" << endl;
@@ -377,7 +307,7 @@ void *llprof_aggressive_thread(void *p)
     while(true)
     {
         cout << "Aggressive Thread: try" << endl;
-        int sock = socket_connect_to(host, port);
+        int sock = SocketConnectTo(host, port);
         if(sock != -1)
         {
             cout << "Aggressive Thread: connected:" << sock << endl;

@@ -6,11 +6,11 @@
 
 
 #include <string>
+#include "network.h"
 
 // サーバースレッドの開始
 void llprof_start_server();
 
-// アグレッシブスレッドの開始
 void llprof_start_aggressive_thread();
 
 void SendMessage(int sock, int msg_id, const void *buf, int buf_sz);

@@ -97,21 +97,3 @@ void rrprof_exit (void)
 
 
 
-void HexDump(char *buf, int size)
-{
-    int i;
-    for(i = 0; i < size; i++)
-    {
-        if(i % 32 == 0)
-        {
-            if(i != 0)
-                printf("\n");
-            printf("%.8X: ", i);
-        }
-        printf("%.2X ", ((unsigned char *)buf)[i]);
-    }
-    printf("\n");
-}
-
-
-
