@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 import sys
-sys.path.append('../pyllprof')
+# sys.path.append('../pyllprof')
 
 import timeit
+
+ntest = 5
+if len(sys.argv) >= 2:
+    ntest = int(sys.argv[1])
+    
+
 
 def tak(x, y, z):
     if x <= y:
@@ -15,7 +21,7 @@ def main():
     def f():
         return tak(12,6,0)
     print("Start:")
-    for i in range(6):
+    for i in range(ntest):
         t = timeit.Timer(stmt = f)
         print("Time", i, "=", t.timeit(number = 1))
 
