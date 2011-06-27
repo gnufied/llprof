@@ -66,6 +66,8 @@
 // スタック配列の要求
 #define MSG_STACK_DATA        9
 
+#define MSG_NOWINFO             12
+
 // 要求が成功した
 #define MSG_COMMAND_SUCCEED  100
 // 要求が失敗した
@@ -73,7 +75,8 @@
 
 
 #define BT_PERFORMANCE      1
-#define BT_STACK            2
+#define BT_NOWINFO          2
+#define BT_STACK            3
 
 
 

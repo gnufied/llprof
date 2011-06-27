@@ -164,6 +164,7 @@ struct ThreadInfo
     
     ThreadInfo *next;
 
+    profile_value_t NowInfo[NUM_RECORDS];
 
     ThreadInfo(unsigned long long thread_id)
     {
@@ -391,17 +392,17 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
     get_current_node_info_pair(ti, ninfo, sinfo);
 
     sinfo->call_count++;
-    llprof_rtype_start_node(ninfo->start_value);
-    
+    llprof_rtype_start_node(sinfo->start_value);
+    memcpy(ninfo->start_value, sinfo->start_value, NUM_RECORDS * 8);
     
 
-
+    
     pthread_mutex_lock(&ti->StackMutex);
     StackInfo *stack_info = new_tail_elem(*ti->SerializedStackArray);
     memcpy(stack_info->start_value, ninfo->start_value, NUM_RECORDS * 8);
     stack_info->node_id = ti->CurrentCallNodeID;
     pthread_mutex_unlock(&ti->StackMutex);
- 
+    
     
 	ti->stop = 0;
 }
@@ -530,7 +531,13 @@ int BufferIteration_NextBuffer(ThreadIterator *iter)
         iter->phase = 2;
         return 1;
     }
+
     if(iter->phase == 2)
+    {
+        iter->phase = 3;
+        return 1;
+    }
+    if(iter->phase == 3)
     {
         iter->phase = 1;
         iter->current_thread = iter->current_thread->next;
@@ -577,6 +584,14 @@ void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned 
 
 }
 
+
+void CallTree_GetNowInfo(ThreadInfo *thread, void **buf, unsigned int *size)
+{
+    llprof_rtype_stackinfo_nowval(thread->NowInfo);
+ 	*size = thread->NowInfo;
+	*buf = NUM_RECORDS * sizeof(profile_value_t);
+}
+
 void BufferIteration_GetBuffer(ThreadIterator *iter, void **buf, unsigned int *size)
 {
     assert(iter->got_flag == 0);
@@ -586,7 +601,12 @@ void BufferIteration_GetBuffer(ThreadIterator *iter, void **buf, unsigned int *s
         CallTree_GetSerializedBuffer(iter->current_thread, buf, size);
         return;
     }
-    if(iter->phase == 2)
+    else if(iter->phase == 2)
+    {
+        CallTree_GetNowInfo(iter->current_thread, buf, size);
+        return;
+    }
+    else if(iter->phase == 3)
     {
         CallTree_GetSerializedStackBuffer(iter->current_thread, buf, size);
         return;
@@ -606,6 +626,10 @@ int BufferIteration_GetBufferType(ThreadIterator *iter)
         return BT_PERFORMANCE;
     }
     if(iter->phase == 2)
+    {
+        return BT_NOWINFO;
+    }
+    if(iter->phase == 3)
     {
         return BT_STACK;
     }

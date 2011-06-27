@@ -123,6 +123,8 @@ void msg_handler(int sock, int msg_id, int size, char *msgbuf)
                 msg_type = MSG_PROFILE_DATA;
             else if(BufferIteration_GetBufferType(&iter) == BT_STACK)
                 msg_type = MSG_STACK_DATA;
+            else if(BufferIteration_GetBufferType(&iter) == BT_NOWINFO)
+                msg_type = MSG_NOWINFO;
             unsigned long long thread_id = BufferIteration_GetThreadID(&iter);
             SendMessage2(
                 sock, msg_type,
