@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <memory>
+#include <algorithm>
 
 #include "boost_wrap.h"
 #include "data_store.h"
@@ -8,19 +9,75 @@
 #include "../llprofcommon/llprof_const.h"
 #include "http.h"
 
+
 namespace llprof{
+
+
+
+RecordNode::RecordNode()
+{
+}
+
+
+void RecordNode::SetDataStore(DataStore *ds)
+{
+    ds_ = ds;
+    values_.resize(ds_->GetNumProfileValues());
+}
+    
+void TimeSliceStore::SetThreadStore(ThreadStore *ts)
+{
+    ts_ = ts;
+}
+void TimeSliceStore::SetTimeNumber(int tn)
+{
+    time_number_ = tn;
+}
+
+ProfileValue TimeSliceStore::GetProfileValue(NodeID nid, int idx)
+{
+    if(tree_[nid].empty())
+        tree_[nid].resize(ts_->GetDataStore()->GetNumProfileValues());
+    return tree_[nid][idx];
+}
+
+void TimeSliceStore::SetProfileValue(NodeID nid, int idx, ProfileValue value)
+{
+    if(tree_[nid].empty())
+        tree_[nid].resize(ts_->GetDataStore()->GetNumProfileValues());
+    tree_[nid][idx] = value;
+}
+
+void TimeSliceStore::DumpText(ostream &strm)
+{
+    strm << "<TimeSlice [" << time_number_ << "]>" << endl;
+    
+    for(map< NodeID, vector<ProfileValue> >::iterator it = tree_.begin(); it != tree_.end(); it++)
+    {
+        strm << "  Node " << (*it).first << " ";
+        for(int i = 0; i < ts_->GetDataStore()->GetNumProfileValues(); i++)
+        {
+            strm << ":" << (*it).second[i];
+        }
+        strm << ":" << endl;
+    }
+}
+
 
 DataStore::DataStore(int id)
 {
     id_ = id;
     socket_ = 0;
     closed_ = false;
+    current_time_number_ = 0;
 }
 
 DataStore::~DataStore()
 {
     Close();
 }
+
+
 
 void DataStore::SetConnectedSocket(int sock)
 {
@@ -55,22 +112,39 @@ void DataStore::Close()
 }
 
 
+Lockable::Lockable()
+{
+    pthread_mutex_init(&mtx_, NULL);
+}
+
+void Lockable::Lock()
+{
+    pthread_mutex_lock(&mtx_);
+}
+
+void Lockable::Unlock()
+{
+    pthread_mutex_unlock(&mtx_);
+}
+
+
 void DataStore::SendMessage(unsigned int msg_type, void *msg, int msg_size)
 {
     SendProfMessage(socket_, msg_type, msg, msg_size);
 }
 
-auto_ptr<MessageBuf> DataStore::SendRequest(unsigned int msg_type, void *msg, int msg_size)
+intrusive_ptr<MessageBuf> DataStore::SendRequest(unsigned int msg_type, void *msg, int msg_size)
 {
     SendMessage(msg_type, msg, msg_size);
     return RecvMessage();
 }
 
-auto_ptr<MessageBuf> DataStore::RecvMessage()
+intrusive_ptr<MessageBuf> DataStore::RecvMessage()
 {
-    auto_ptr<MessageBuf> buf(new MessageBuf());
+    intrusive_ptr<MessageBuf> buf(new MessageBuf());
     buf->Resize(8);
-    buf->ReadFrom(socket_, 0, 8);
+    if(buf->ReadFrom(socket_, 0, 8) != 0)
+        return intrusive_ptr<MessageBuf>();
     if(buf->GetMessageSize() == 0)
         return buf;
     buf->FitSize();
@@ -84,7 +158,7 @@ int MessageBuf::ReadFrom(int sock, int offset, int sz)
 }
 
 
-auto_ptr<MessageBuf> DataStore::SendQueryInfoRequest(int request_val)
+intrusive_ptr<MessageBuf> DataStore::SendQueryInfoRequest(int request_val)
 {
     return SendRequest(MSG_QUERY_INFO, &request_val, 4);
 }
@@ -107,7 +181,7 @@ void* DataStore::ThreadMain()
     }
 
     
-    auto_ptr<MessageBuf> res;
+    intrusive_ptr<MessageBuf> res;
 
     // オフセット値の取得
     {
@@ -151,56 +225,98 @@ void* DataStore::ThreadMain()
         cout << "Profile Target: " << target_name_ << endl;
     }
     
-    GetProfileData();
     
+    while(GetProfileData())
+    {
+        sleep(1);
+    }
     
 
     return NULL;
 }
 
-void DataStore::GetProfileData()
+bool DataStore::GetProfileData()
 {
-    auto_ptr<MessageBuf> res;
-    cout << "Send MSG_REQ_PROFILE_DATA" << endl;
+    Locker lk(this);
+    current_time_number_++;
+
+    intrusive_ptr<MessageBuf> res;
+    map< ThreadID, intrusive_ptr<MessageBuf> > buf_for_threads;
+    vector<NameID> query_names;
+    
+    int offset_nameid = GetMemberOffsetOf("pdata.nameid");
+    int pdata_record_size = GetMemberOffsetOf("pdata.record_size");
+
     SendMessage(MSG_REQ_PROFILE_DATA);
     while(true)
     {
-        cout << "Receiving..." << endl;
         res = RecvMessage();
-        cout << "Received: " << res->GetMessageType() << " Size: " << res->GetMessageSize() << endl;
         if(!res.get())
         {
-            cout << "Recv Error" << endl;
-            return;
+            return false;
         }
         switch(res->GetMessageType())
         {
         case MSG_COMMAND_SUCCEED:
-            cout << "Command Succeed" << endl;
-            return;
+            goto end_of_loop;
 
         case MSG_ERROR:
-            cout << "Command Error" << endl;
-            return;
+            return false;
             
         case MSG_PROFILE_DATA:{
-            uint64_t thread_id = res->Get<uint64_t>();
+            ThreadID thread_id = res->Get<uint64_t>();
+
             
-            map<ThreadID, ThreadStore>::iterator iter = threads_.find(thread_id);
-            if(iter == threads_.end())
+            res->SetCurrentPtr(8);
+            while(!res->IsEOF())
             {
-                threads_.insert(make_pair(thread_id, ThreadStore(this)));
-                iter = threads_.find(thread_id);
+                char *p = res->GetCurrentBufPtr();
+                NameID nameid = *(NameID *)(p + offset_nameid);
+                if(!HasNameID(nameid))
+                {
+                    if(query_names.size() == 0)
+                        query_names.push_back(0);
+                    query_names.push_back(nameid);
+                    name_table_[nameid] = "<Asking>";
+                }
+                
+                res->Seek(pdata_record_size);
             }
-            
-            (*iter).second.Store(res.get());
-            
-            
+            buf_for_threads[thread_id] = res;
             break;
         }
         }
     }
-    
+end_of_loop:
+
+    if(!query_names.empty())
+    {
+        ((unsigned int *)&query_names[0])[0] = QUERY_NAMES;
+        ((unsigned int *)&query_names[0])[1] = query_names.size() - 1;
+        intrusive_ptr<MessageBuf> names = SendRequest(MSG_QUERY_NAMES, &query_names[0], query_names.size() * sizeof(query_names[0]));
+        stringstream names_strm(names->AsString());
+        for(size_t i = 0; i < query_names.size() - 1; i++)
+        {
+            string s;
+            getline(names_strm, s);
+            name_table_[query_names[i+1]] = s;
+        }
+    }
+
+    for(map< ThreadID, intrusive_ptr<MessageBuf> >::iterator iter = buf_for_threads.begin();
+        iter != buf_for_threads.end(); iter++)
+    {
+        map<ThreadID, ThreadStore>::iterator tpos = threads_.find((*iter).first);
+        if(tpos == threads_.end())
+        {
+            threads_.insert(make_pair((*iter).first, ThreadStore(this)));
+            tpos = threads_.find((*iter).first);
+            (*tpos).second.SetThreadID((*iter).first);
+        }
+        (*tpos).second.Store((*iter).second);
+        
+    }
+    return true;
 }
 
 int DataStore::GetMemberOffsetOf(const string &name)
@@ -208,24 +324,211 @@ int DataStore::GetMemberOffsetOf(const string &name)
     return member_offset_info_[name];
 }
 
-void ThreadStore::Store(MessageBuf *buf)
+void DataStore::DumpText(ostream &strm)
 {
-    buf->SetCurrentPtr(8);
+    strm << "<Object: DataStore " << (void *)this << ">" << endl;
+    strm << "ID: " << id_ << endl;
+    strm << "Socket: " << socket_ << endl;
+    strm << "current_time_number: " << current_time_number_ << endl;
+    strm << "Closed: " << closed_ << endl;
+    strm << "ConnectTo: " << host_ << ":" << port_ << endl;
+    strm << "TargetName: " << target_name_ << endl;
+    strm << "num_records: " << num_records_ << endl;
+    strm << "[member_offset_info]" << endl << member_offset_info_ << endl;
+    strm << "[record_metadata] " << endl << record_metadata_ << endl;
+    strm << "[NameTable]" << endl << name_table_ << endl << endl;
+
+    for(map<ThreadID, ThreadStore>::iterator it = threads_.begin(); it != threads_.end(); it++)
+    {
+        (*it).second.DumpText(strm);
+    }
+    strm << "<End>" << endl;
+}
+
+void DataStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
+{
+    JsonDict data(strm);
+    data.add("timenum", GetCurrentTimeNumber());
+    JsonList threads;
+    for(map<ThreadID, ThreadStore>::iterator it = threads_.begin(); it != threads_.end(); it++)
+    {
+        stringstream item;
+        (*it).second.DumpJSON(item, flag, p1, p2);
+        threads.add<stringstream &>(item);
+    }
+    data.add<stringstream &>("threads", threads.strm());
+}
+
+
+void ProfileValuesToStream(stringstream &out, const vector<ProfileValue> &vec)
+{
+    JsonList list(out);
+    for(vector<ProfileValue>::const_iterator it = vec.begin(); it != vec.end(); it++)
+    {
+        list.add(*it);
+    }
+}
+
+void write_json(stringstream &strm, const RecordNode &node)
+{
+    JsonDict out(strm);
+    out.add<unsigned int>("id", node.GetNodeID());
+    out.add<unsigned int>("pid", node.GetParentNodeID());
+    out.add<string>("name", node.GetDataStore()->GetNameFromID(node.GetNameID()));
     
+    stringstream s;
+    ProfileValuesToStream(s, node.GetValuesVector());
+    out.add<stringstream &>("values", s);
+
+}
+
+void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
+{
+    JsonDict store(strm);
+    store.add("id", GetThreadID());
+    if((flag & DF_CURRENT_TREE) == DF_CURRENT_TREE)
+    {
+        JsonList nodes;
+        for(map<NodeID, RecordNode>::iterator it = current_tree_.begin(); it != current_tree_.end(); it++)
+            nodes.add<RecordNode &>((*it).second);
+        store.add<stringstream &>("nodes", nodes.strm());
+    }
+    else if((flag & DF_DIFF_TREE) == DF_DIFF_TREE)
+    {
+        JsonList nodes;
+        if(p2 == 0)
+            p2 = ds_->GetCurrentTimeNumber();
+        
+        if(p1 - p2 > 10)
+        {
+            cout << "Too many diff: " << p1 << " - " << p2 << endl;
+        }
+        
+        map<NodeID, RecordNode> integrated;
+        for(int t = p1; t <= p2; t++)
+        {
+            TimeSliceStore *tss = GetTimeSlice(t);
+            if(!tss)
+                continue;
+            for(TimeSliceStore::map_iterator it = tss->nodes_begin(); it != tss->nodes_end(); it++)
+            {
+                map<NodeID, RecordNode>::iterator pos = integrated.find((*it).first);
+                if(pos == integrated.end())
+                {
+                    RecordNode &node = integrated[(*it).first];
+                    node.SetDataStore(ds_);
+                    node.SetNodeID((*it).first);
+                    node.SetParentNodeID(current_tree_[(*it).first].GetParentNodeID());
+                    node.SetNameID(current_tree_[(*it).first].GetNameID());
+                    pos = integrated.find((*it).first);
+                }
+                (*pos).second.Accumulate((*it).second);
+            }
+        } 
+        
+        for(map<NodeID, RecordNode>::iterator it = integrated.begin(); it != integrated.end(); it++)
+            nodes.add<RecordNode &>((*it).second);
+        
+        store.add<stringstream &>("nodes", nodes.strm());
+    }
+}
+
+
+void ThreadStore::DumpText(ostream &strm)
+{
+    strm << "<ThreadStore>" << endl;
+    for(map<NodeID, RecordNode>::iterator it = current_tree_.begin(); it != current_tree_.end(); it++)
+    {
+        RecordNode &n = (*it).second;
+        strm << "  Node:" << n.GetNodeID() << " name:" << ds_->GetNameFromID(n.GetNameID()) 
+                            << "(" << n.GetNameID() << ")  parent:" << n.GetParentNodeID() << " ";
+                            
+        for(int i = 0; i < ds_->GetNumProfileValues(); i++)
+        {
+            strm << ":" << n.GetProfileValue(i);
+        }
+        strm << ":" << endl;
+    }
+    
+    
+    for(size_t i = 0; i < time_slice_.size(); i++)
+    {
+        strm << endl;
+        time_slice_[i].DumpText(strm);
+    }
+}
+
+void ThreadStore::Store(intrusive_ptr<MessageBuf> buf)
+{
     int offset_call_node_id = ds_->GetMemberOffsetOf("pdata.call_node_id");
+    int offset_parent_node_id = ds_->GetMemberOffsetOf("pdata.parent_node_id");
     int offset_nameid = ds_->GetMemberOffsetOf("pdata.nameid");
+    int pdata_record_size = ds_->GetMemberOffsetOf("pdata.record_size");
+    int offset_value = ds_->GetMemberOffsetOf("pdata.value");
+
+    buf->SetCurrentPtr(8);
+    vector<ProfileValue> values(ds_->GetNumProfileValues());
     while(!buf->IsEOF())
     {
         char *p = buf->GetCurrentBufPtr();
         
         unsigned int cnid = *(unsigned int *)(p + offset_call_node_id);
+        unsigned int parent_cnid = *(unsigned int *)(p + offset_parent_node_id);
         NameID nameid = *(NameID *)(p + offset_nameid);
-        cout << "[" << cnid << "]  Name:" << nameid << endl;        
         
-        buf->Seek(ds_->GetMemberOffsetOf("pdata.record_size"));
+
+        
+        map<NodeID, RecordNode>::iterator iter = current_tree_.find(cnid);
+        if(iter == current_tree_.end())
+        {
+            RecordNode &node = current_tree_[cnid];
+            node.SetDataStore(ds_);
+            node.SetNodeID(cnid);
+            node.SetParentNodeID(parent_cnid);
+            node.SetNameID(nameid);
+            iter = current_tree_.find(cnid);
+        }
+        RecordNode &node = (*iter).second;
+
+        for(int i = 0; i < ds_->GetNumProfileValues(); i++)
+        {
+            values[i] = ((ProfileValue *)(p + offset_value))[i];
+            TimeSliceStore *tss = GetTimeSlice(ds_->GetCurrentTimeNumber());
+            assert(tss);
+            tss->SetProfileValue(cnid, i, values[i]);
+        }
+        node.Accumulate(values);
+        buf->Seek(pdata_record_size);
     }
-    cout << "End ThreadStore" << endl;
+    
 }
+
+void RecordNode::Accumulate(const vector<ProfileValue> &values)
+{
+    for(int i = 0; i < ds_->GetNumProfileValues(); i++)
+    {
+        values_[i] += values[i];
+    }
+}
+
+TimeSliceStore *ThreadStore::GetTimeSlice(int ts)
+{
+    if(time_slice_.empty())
+    {
+        start_time_number_ = ts;
+    }
+    if(ts < start_time_number_)
+        return NULL;
+
+    if((unsigned int)(ts - start_time_number_) >= time_slice_.size())
+    {
+        time_slice_.resize(ts - start_time_number_ + 1);
+    }
+    time_slice_[ts - start_time_number_].SetTimeNumber(ts);
+    time_slice_[ts - start_time_number_].SetThreadStore(this);
+    return &time_slice_[ts - start_time_number_];
+}
+
 
 map<int, DataStore*> *gAllDataStore;
 int gDataStoreIDSeq;
@@ -235,9 +538,10 @@ void InitDataStore()
     gDataStoreIDSeq = 0;
 }
 
-bool DataStoreRequest(std::stringstream &out, const std::vector<std::string> &path,
+bool DataStoreRequest(std::stringstream &out, string &mime, const std::vector<std::string> &path,
         const std::map<std::string,std::string> &data)
 {
+    mime = "text/javascript";
     if(path.size() > 0 && path[0] == "new")
     {
         vector<string> connect_to;
@@ -248,13 +552,14 @@ bool DataStoreRequest(std::stringstream &out, const std::vector<std::string> &pa
         
         gDataStoreIDSeq++;
         DataStore *ds = new DataStore(gDataStoreIDSeq);
+        Locker lk(ds);
 
 
 
         (*gAllDataStore)[gDataStoreIDSeq] = ds;
         ds->SetConnectTo(connect_to[0], connect_to[1]);
         ds->StartThread();
-        write_json(out, "OK");
+        ::write_json(out, "OK");
         return true;
     }
     else if(path.size() > 0 && path[0] == "list")
@@ -262,6 +567,7 @@ bool DataStoreRequest(std::stringstream &out, const std::vector<std::string> &pa
         JsonList lw(out);
         for(map<int,DataStore*>::iterator iter = gAllDataStore->begin(); iter != gAllDataStore->end(); iter++)
         {
+            Locker lk((*iter).second);
             stringstream substrm;
             JsonDict d(substrm);
             d.add("id", (*iter).second->GetID());
@@ -272,7 +578,51 @@ bool DataStoreRequest(std::stringstream &out, const std::vector<std::string> &pa
         }
         return true;
     }
+    else if(path.size() > 1 && path[0] == "tree")
+    {
+        map<int, DataStore*>::iterator pos;
+        try{
+            pos = gAllDataStore->find(lexical_cast<int>(path[1]));
+        }
+        catch(bad_lexical_cast &e)
+        {
+            out << "{}";
+            return true;
+        }
+        if(pos == gAllDataStore->end())
+        {
+            out << "{}";
+            return true;
+        }
+        DataStore *ds = (*pos).second;
+        Locker lk(ds);
 
+        if(path.size() > 2 && path[2] == "current")
+        {
+            ds->DumpJSON(out, DF_CURRENT_TREE, 0, 0);
+        }
+        else if(path.size() > 3 && path[2] == "diff")
+        {
+            ds->DumpJSON(
+                out,
+                DF_DIFF_TREE,
+                lexical_cast<int>(path[3]), 
+                path.size() > 2 ? lexical_cast<int>(path[4]) : 0
+            );
+        }
+        return true;
+    }
+    else if(path.size() > 0 && path[0] == "dump")
+    {
+        for(map<int, DataStore*>::iterator it = gAllDataStore->begin(); it != gAllDataStore->end(); it++)
+        {
+            out << "*** DataStore "  << (*it).first << endl;
+           (*it).second->DumpText(out);
+            out << endl;
+            out << endl;
+        }
+        return true;
+    }
     return false;
 }
 

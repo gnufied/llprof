@@ -320,10 +320,11 @@ int client_handler(int sock)
         stringstream strm;
         map<string, string> data;
         parse_query_string(data, req_body_str);
-        if(!DataStoreRequest(strm, path, data))
+        string mime;
+        if(!DataStoreRequest(strm, mime, path, data))
             resp = build_resp_404();
         else
-            resp = build_resp_json(strm);
+            resp = build_resp_200(mime, strm.str());
     }
     else
     {
