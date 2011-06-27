@@ -84,8 +84,11 @@ bool SendProfMessage(int sock, int msg_id, const void *buf, int buf_sz)
     unsigned int msg[] = {msg_id, buf_sz};
     if(SendFull(sock, (const char *)msg, 8) != 0)
         return false;
-    if(SendFull(sock, (const char *)buf, buf_sz) != 0)
-        return false;
+    if(buf_sz != 0)
+    {
+        if(SendFull(sock, (const char *)buf, buf_sz) != 0)
+            return false;
+    }
     return true;
 }
 

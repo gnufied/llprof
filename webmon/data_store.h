@@ -7,6 +7,11 @@
 #include <map>
 #include <string>
 #include <cstring>
+#include <memory>
+
+namespace llprof{
+
+using namespace std;
 
 class MessageBuf
 {
@@ -28,7 +33,7 @@ public:
         char *newbuf = new char[sz];
         if(buf_)
         {
-            std::memcpy(newbuf, buf_, sz_);
+            memcpy(newbuf, buf_, sz_);
             delete []buf_;
         }
         buf_ = newbuf;
@@ -53,12 +58,42 @@ public:
     
     int ReadFrom(int sock, int offset, int sz);
     
-    std::string AsString()
+    string AsString()
     {
-        return std::string(buf_+8, sz_-8);
+        return string(buf_+8, sz_-8);
     }
 };
 
+
+struct RecordMetadata
+{
+    string FieldName;
+    string Unit;
+    string Flags;
+    
+};
+inline ostream &operator <<(ostream &s, const RecordMetadata &md)
+{
+    return s << "(Metadata: " << md.FieldName << " (" << md.Unit << ", " << md.Flags << ")";
+}
+
+typedef unsigned long long NodeID;
+typedef unsigned long long NameID;
+
+
+class DataStore;
+
+class RecordNode
+{
+    DataStore *ds_;
+    NodeID id_;
+    NameID node_name_;
+public:
+    RecordNode(DataStore *ds): ds_(ds)
+    {
+    }
+    
+};
 
 class DataStore
 {
@@ -66,8 +101,16 @@ class DataStore
     int id_;
     pthread_t conn_thread_;
     bool closed_;
-    std::string host_, port_;
-    std::string target_name_;
+    string host_, port_;
+    string target_name_;
+    
+    map<string, int> member_offset_info_;
+    map<int, RecordMetadata> record_metadata_;
+    int num_records_;
+
+    map<NameID, string> name_table_;
+    map<NodeID, RecordNode> current_tree_;
+
 
 public:
     DataStore(int id);
@@ -75,21 +118,31 @@ public:
     
     int GetID(){return id_;}
     
-    std::string GetTargetName(){return target_name_;}
-    std::string GetTargetHost(){return host_;}
+    string GetTargetName(){return target_name_;}
+    string GetTargetHost(){return host_;}
     void SetConnectedSocket(int sock);
-    void SetConnectTo(std::string host, std::string port);
+    void SetConnectTo(string host, string port);
     void StartThread();
     void Close();
-    void ThreadMain();
+    void *ThreadMain();
     
-    MessageBuf *SendRequest(unsigned int msg_type, void *msg, int msg_size);
+    void SendMessage(unsigned int msg_type, void *msg = NULL, int msg_size = 0);
+    auto_ptr<MessageBuf> RecvMessage();
+
+    // SendRequest = SendMessaage + RecvMessage
+    auto_ptr<MessageBuf> SendRequest(unsigned int msg_type, void *msg = NULL, int msg_size = 0);
+    
+    auto_ptr<MessageBuf> SendQueryInfoRequest(int request_val);
     
     
+    void GetProfileData();
+
 };
 
 void InitDataStore();
-bool DataStoreRequest(std::stringstream &out, const std::vector<std::string> &path,
-        const std::map<std::string,std::string> &data);
+bool DataStoreRequest(stringstream &out, const vector<string> &path,
+        const map<string,string> &data);
 
+
+}
 #endif // LLPROF_DATA_STORE_H

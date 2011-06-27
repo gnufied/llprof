@@ -14,7 +14,29 @@ void start_http_server();
 // Json writer
 inline void write_json(std::stringstream &strm, const std::string &value)
 {
-    strm << "\"" << value << "\"";
+    strm << "\"";
+    for(std::string::const_iterator iter = value.begin(); iter != value.end(); iter++)
+    {
+        switch(*iter)
+        {
+        case '\t':
+            strm << "\\t";
+            break;
+        case '\r':
+            strm << "\\r";
+            break;
+        case '\n':
+            strm << "\\n";
+            break;
+        case '"':
+            strm << "\\\"";
+            break;
+        default:
+            strm << *iter;
+            break;
+        }
+    }
+    strm << "\"";
 }
 
 inline void write_json(std::stringstream &strm, const char *value)
@@ -149,5 +171,20 @@ typename TMap::mapped_type getm(const TMap &m, typename TMap::key_type key, type
 }
 
 
+
+namespace llprof{
+        
+    template<typename TKey, typename TValue>
+    std::ostream& operator<<(std::ostream& s, const std::map<TKey, TValue>& x)
+    {
+        for(typename std::map<TKey, TValue>::const_iterator iter = x.begin(); iter != x.end(); iter++)
+        {
+            s << (*iter).first << " = " << (*iter).second << std::endl;
+        }
+        return s;
+    }
+
+
+}
 
 #endif //LLPROF_HTTP_H

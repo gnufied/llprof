@@ -6,7 +6,7 @@
 #include <iostream>
 
 using namespace std;
-
+using namespace llprof;
 
 int main()
 {

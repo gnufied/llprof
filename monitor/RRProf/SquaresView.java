@@ -36,7 +36,8 @@ public class SquaresView extends JPanel implements ChangeListener {
 	JPanel ctrlpanel;
 	JSlider max_depth_slider;
 	Record selectedRecord, rootRecord;
-	JTextArea selectedLabel, rootLabel;
+	JTextArea selectedLabel, rootLabel, debugLabel;
+	int nBoxes;
 	SquaresView(MonitorBrowser b) {
 		browser = b;
 		selectedRecord = null;
@@ -69,6 +70,10 @@ public class SquaresView extends JPanel implements ChangeListener {
 		selectedLabel.setEditable(false);
 		selectedLabel.setLineWrap(true);
 
+		
+		ctrlpanel.add(new JLabel("Debug:"));
+		ctrlpanel.add(debugLabel = new JTextArea("---"));
+
 	}
 
 	private static final int ORIENT_V = 1;
@@ -88,7 +93,7 @@ public class SquaresView extends JPanel implements ChangeListener {
 	}
 	
 	void drawBox(PaintContext ctx) {
-
+		nBoxes++;
 		ctx.rand.setSeed(ctx.r.getID());
 		ctx.rand.setSeed(ctx.rand.nextLong());
 		float cr; cr = ctx.rand.nextFloat();
@@ -320,8 +325,11 @@ public class SquaresView extends JPanel implements ChangeListener {
 		ctx.w = canvas.getWidth()-8;
 		ctx.h = canvas.getHeight()-8;
 		ctx.depth = max_depth_slider.getValue();
+		nBoxes = 0;
 		paintRecord(ctx);
 		graphics.drawImage(backbuf,0,0,null);
+		
+		debugLabel.setText("nBoxes: " + Integer.toString(nBoxes));
 	}
 	
 	public Record getSelection(int mx, int my) {

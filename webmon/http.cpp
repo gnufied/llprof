@@ -20,25 +20,18 @@
 #include <cstdlib>
 #include <cstdio>
 
+#include "boost_wrap.h"
 #include "data_store.h"
 using namespace std;
-using namespace boost;
 
-inline ostream& operator<<(ostream& s, const map<string, string>& x)
-{
-    for(map<string,string>::const_iterator iter = x.begin(); iter != x.end(); iter++)
-    {
-        s << (*iter).first << " = " << (*iter).second << endl;
-    }
-    return s;
-}
+using namespace llprof;
 
 string url_decode(string src)
 {
     string result;
     while(true)
     {
-        int pp = src.find("%");
+        string::size_type pp = src.find("%");
         if(pp == string::npos)
         {
             return result + src;
@@ -94,7 +87,7 @@ bool recv_string(int sock, string &result, int maxlen)
 
 bool send_string(int sock, const string &msg)
 {
-    int sent = 0;
+    size_t sent = 0;
     if(msg.length() == 0)
         return true;
     while(msg.length() > sent) 
@@ -209,7 +202,7 @@ int get_fstream_size(ifstream &strm)
 string build_resp_file(string file_name)
 {
     ifstream file(file_name.c_str(), ifstream::in);
-    cout << "Filename:" << file_name << endl;
+    // cout << "Filename:" << file_name << endl;
     if(file.bad() || file.fail())
     {
         cout << "File is bad:" << endl;
@@ -246,6 +239,9 @@ string build_resp_json(const stringstream &strm)
 
 int client_handler(int sock)
 {
+    static unsigned long long request_counter;
+    request_counter++;
+
     string req_header_str, buf;
     string req_body_str;
     while(true)
@@ -280,9 +276,10 @@ int client_handler(int sock)
         }
     }
     
-    cout << "Header::" << endl << req_header << endl;
-    cout << "Body::" << endl << req_body_str << endl;
-    cout << endl;
+    //cout << "Header::" << endl << req_header << endl;
+    //cout << "Body::" << endl << req_body_str << endl;
+    //cout << endl;
+    cout << "Request " << request_counter << ": " << req_header["!method"] << " " << req_header["!path"] << endl;
 
     string resp = "";
     vector<string> path;
@@ -291,12 +288,12 @@ int client_handler(int sock)
     
     if(path.size() == 0 || path[0] == "" || path[0] == "index.html")
     {
-        cout << "Handle top index" << endl;
+        // cout << "Handle top index" << endl;
         resp = build_resp_file("./files/index.html");
     }
     else if(path.size() > 1 && path[0] == "files")
     {
-        cout << "Handle /files/" << endl;
+        // cout << "Handle /files/" << endl;
         path.erase(path.begin());
         string target_file_path = algorithm::join(path, "/");
         if(target_file_path.find("..") != string::npos)
@@ -334,14 +331,15 @@ int client_handler(int sock)
     }
     send_string(sock, resp);
     close(sock);
-    cout << "Responced." << endl;
-    
+    //cout << "Responced." << endl;
+    return 0;
 }
 
 
 int start_client_handler(int sock)
 {
     client_handler(sock);
+    return 0;
 }
 
 void* http_server_main(void *p)
@@ -369,15 +367,15 @@ void* http_server_main(void *p)
 
  	while(1)
     {
-        cout << "Waiting accept" << endl;
+        // cout << "Waiting accept" << endl;
         struct sockaddr_in client_addr;
         int sz_client_addr = sizeof(client_addr);
         int client_sock = accept(server_sock, (struct sockaddr *) &client_addr, (socklen_t *)&sz_client_addr);
-		cout << "Accept from " << inet_ntoa(client_addr.sin_addr) << endl;
+		// cout << "Accept from " << inet_ntoa(client_addr.sin_addr) << endl;
 
         start_client_handler(client_sock);
 	}
-    
+    return NULL;
 }
 
 pthread_t g_http_server_thread;
