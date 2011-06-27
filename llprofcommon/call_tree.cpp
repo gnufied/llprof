@@ -164,7 +164,7 @@ struct ThreadInfo
     
     ThreadInfo *next;
 
-    profile_value_t NowInfo[NUM_RECORDS];
+    profile_value_t NowInfo[NUM_RECORDS+1];
 
     ThreadInfo(unsigned long long thread_id)
     {
@@ -392,8 +392,8 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
     get_current_node_info_pair(ti, ninfo, sinfo);
 
     sinfo->call_count++;
-    llprof_rtype_start_node(sinfo->start_value);
-    memcpy(ninfo->start_value, sinfo->start_value, NUM_RECORDS * 8);
+    llprof_rtype_start_node(sinfo->profile_value);
+    memcpy(ninfo->start_value, sinfo->profile_value, NUM_RECORDS * 8);
     
 
     
@@ -561,6 +561,8 @@ void CallTree_GetSerializedBuffer(ThreadInfo *thread, void **buf, unsigned int *
 	*buf = &(*gBackBuffer_SerializedNodeInfoArray)[0];
     *size = gBackBuffer_SerializedNodeInfoArray->size() * sizeof(MethodNodeSerializedInfo);
     
+    thread->NowInfo[0] = thread->CurrentCallNodeID;
+    
     pthread_mutex_unlock(&thread->DataMutex);
 }
 
@@ -587,9 +589,9 @@ void CallTree_GetSerializedStackBuffer(ThreadInfo *thread, void **buf, unsigned 
 
 void CallTree_GetNowInfo(ThreadInfo *thread, void **buf, unsigned int *size)
 {
-    llprof_rtype_stackinfo_nowval(thread->NowInfo);
- 	*size = thread->NowInfo;
-	*buf = NUM_RECORDS * sizeof(profile_value_t);
+    llprof_rtype_stackinfo_nowval(thread->NowInfo+1);
+ 	*buf = thread->NowInfo; // [0]には現在のCNIDが入っている
+	*size = (NUM_RECORDS+1) * sizeof(profile_value_t);
 }
 
 void BufferIteration_GetBuffer(ThreadIterator *iter, void **buf, unsigned int *size)

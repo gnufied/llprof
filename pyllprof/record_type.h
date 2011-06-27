@@ -14,7 +14,7 @@ inline void llprof_rtype_init(profile_value_t *value)
 inline void llprof_rtype_metainfo(rtype_metainfo_t *metainfo)
 {
     metainfo->add(0, "time", "ns", "");
-    metainfo->add(1, "start_timw", "ns", "V");
+    metainfo->add(1, "start_timw", "ns", "A");
 }
 
 inline void llprof_rtype_start_node(profile_value_t *value)

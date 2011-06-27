@@ -194,7 +194,6 @@ void* DataStore::ThreadMain()
             strm >> entry.first >> entry.second;
             member_offset_info_.insert(entry);
         }
-        cout << "Offset Info: " << endl << member_offset_info_ << endl;
     }
 
     // レコードメタデータの取得
@@ -203,26 +202,27 @@ void* DataStore::ThreadMain()
         res = SendQueryInfoRequest(INFO_RECORD_METAINFO);
         stringstream strm(res->AsString());
         strm >> num_records_;
+        record_metadata_.resize(num_records_);
+        cout << "Num Metadata:" << num_records_ << endl;
         while(ws(strm), !strm.eof())
         {
-            pair<int, RecordMetadata> entry;
+            int idx = 0;
+            strm >> idx;
+            RecordMetadata &md = record_metadata_[idx];
             strm
-                >> entry.first
-                >> entry.second.FieldName
-                >> entry.second.Unit
-                >> entry.second.Flags
+                >> md.FieldName
+                >> md.Unit
+                >> md.Flags
                 ;
-            record_metadata_.insert(entry);
+            md.UpdateFlag();
         }
-        cout << "Record Metadata: " << endl << record_metadata_ << endl;
+        cout << "V:" << record_metadata_ << endl;
     }
 
     // プロファイルターゲット名の取得
     {
-        record_metadata_.clear();
         res = SendQueryInfoRequest(INFO_PROFILE_TARGET);
         target_name_ = res->AsString();
-        cout << "Profile Target: " << target_name_ << endl;
     }
     
     
@@ -241,7 +241,7 @@ bool DataStore::GetProfileData()
     current_time_number_++;
 
     intrusive_ptr<MessageBuf> res;
-    map< ThreadID, intrusive_ptr<MessageBuf> > buf_for_threads;
+    map< ThreadID, intrusive_ptr<MessageBuf> > buf_for_threads, nowinfo_buf_for_threads;
     vector<NameID> query_names;
     
     int offset_nameid = GetMemberOffsetOf("pdata.nameid");
@@ -265,8 +265,6 @@ bool DataStore::GetProfileData()
             
         case MSG_PROFILE_DATA:{
             ThreadID thread_id = res->Get<uint64_t>();
-
-            
             res->SetCurrentPtr(8);
             while(!res->IsEOF())
             {
@@ -283,6 +281,12 @@ bool DataStore::GetProfileData()
                 res->Seek(pdata_record_size);
             }
             buf_for_threads[thread_id] = res;
+            break;
+        }
+
+        case MSG_NOWINFO:{
+            ThreadID thread_id = res->Get<uint64_t>();
+            nowinfo_buf_for_threads[thread_id] = res;
             break;
         }
         }
@@ -306,6 +310,7 @@ end_of_loop:
     for(map< ThreadID, intrusive_ptr<MessageBuf> >::iterator iter = buf_for_threads.begin();
         iter != buf_for_threads.end(); iter++)
     {
+
         map<ThreadID, ThreadStore>::iterator tpos = threads_.find((*iter).first);
         if(tpos == threads_.end())
         {
@@ -313,10 +318,31 @@ end_of_loop:
             tpos = threads_.find((*iter).first);
             (*tpos).second.SetThreadID((*iter).first);
         }
-        (*tpos).second.Store((*iter).second);
+        ThreadStore &ts = (*tpos).second;
+
+        // Store Now info
+        intrusive_ptr<MessageBuf> nibuf = nowinfo_buf_for_threads[(*iter).first];
+        nibuf->SetCurrentPtr(8);
+        unsigned running_node = nibuf->Get<unsigned int>();
         
+        nibuf->SetCurrentPtr(16);
+        assert((size_t)nibuf->GetRemainSize() >= GetNumProfileValues() * sizeof(ProfileValue));
+        ts.UpdateNowValues(running_node, nibuf->GetCurrentBufPtr());
+
+        // Store profile data
+        ts.Store((*iter).second);
+
+
     }
     return true;
+}
+
+void ThreadStore::UpdateNowValues(NodeID running_node, void *pdata)
+{
+    running_node_ = running_node;
+    if(now_values_.empty())
+        now_values_.resize(ds_->GetNumProfileValues());
+    memcpy(&now_values_[0], pdata, ds_->GetNumProfileValues() * sizeof(ProfileValue));
 }
 
 int DataStore::GetMemberOffsetOf(const string &name)
@@ -357,6 +383,20 @@ void DataStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
         threads.add<stringstream &>(item);
     }
     data.add<stringstream &>("threads", threads.strm());
+
+    JsonDict record_metadata_dict;
+    cout << "Adding md" << endl;
+    for(size_t i = 0; i < record_metadata_.size(); i++)
+    {
+        cout << "Adding: " << i << endl;
+        JsonDict dmd;
+        dmd.add("field_name", record_metadata_[i].FieldName);
+        dmd.add("unit", record_metadata_[i].Unit);
+        dmd.add("flags", record_metadata_[i].Flags);
+
+        record_metadata_dict.add<stringstream &>(lexical_cast<string>(i), dmd.strm());
+    }
+    data.add<stringstream &>("metadata", record_metadata_dict.strm());
 }
 
 
@@ -392,6 +432,11 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
         for(map<NodeID, RecordNode>::iterator it = current_tree_.begin(); it != current_tree_.end(); it++)
             nodes.add<RecordNode &>((*it).second);
         store.add<stringstream &>("nodes", nodes.strm());
+        
+        stringstream tmp;
+        ProfileValuesToStream(tmp, now_values_);
+        store.add<stringstream &>("now_values", tmp);
+        store.add<unsigned int>("running_node", running_node_);
     }
     else if((flag & DF_DIFF_TREE) == DF_DIFF_TREE)
     {
@@ -405,11 +450,13 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
         }
         
         map<NodeID, RecordNode> integrated;
+        TimeSliceStore *last_tss = NULL;
         for(int t = p1; t <= p2; t++)
         {
             TimeSliceStore *tss = GetTimeSlice(t);
             if(!tss)
                 continue;
+            last_tss = tss;
             for(TimeSliceStore::map_iterator it = tss->nodes_begin(); it != tss->nodes_end(); it++)
             {
                 map<NodeID, RecordNode>::iterator pos = integrated.find((*it).first);
@@ -430,6 +477,13 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
             nodes.add<RecordNode &>((*it).second);
         
         store.add<stringstream &>("nodes", nodes.strm());
+        if(last_tss)
+        {
+            stringstream tmp;
+            ProfileValuesToStream(tmp, last_tss->GetNowValues());
+            store.add<stringstream &>("now_values", tmp);
+            store.add<unsigned int>("running_node", last_tss->GetRunningNode());
+        }
     }
 }
 
@@ -468,6 +522,10 @@ void ThreadStore::Store(intrusive_ptr<MessageBuf> buf)
 
     buf->SetCurrentPtr(8);
     vector<ProfileValue> values(ds_->GetNumProfileValues());
+
+    TimeSliceStore *tss = GetTimeSlice(ds_->GetCurrentTimeNumber());
+    assert(tss);
+    tss->SetNowValues(running_node_, now_values_);
     while(!buf->IsEOF())
     {
         char *p = buf->GetCurrentBufPtr();
@@ -493,8 +551,6 @@ void ThreadStore::Store(intrusive_ptr<MessageBuf> buf)
         for(int i = 0; i < ds_->GetNumProfileValues(); i++)
         {
             values[i] = ((ProfileValue *)(p + offset_value))[i];
-            TimeSliceStore *tss = GetTimeSlice(ds_->GetCurrentTimeNumber());
-            assert(tss);
             tss->SetProfileValue(cnid, i, values[i]);
         }
         node.Accumulate(values);
@@ -507,7 +563,10 @@ void RecordNode::Accumulate(const vector<ProfileValue> &values)
 {
     for(int i = 0; i < ds_->GetNumProfileValues(); i++)
     {
-        values_[i] += values[i];
+        if(ds_->GetRecordMetadata(i).AccumuratedValueFlag)
+            values_[i] = values[i];
+        else
+            values_[i] += values[i];
     }
 }
 

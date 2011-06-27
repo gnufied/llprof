@@ -49,7 +49,7 @@ input{
 
 
 .children{
-    margin-left: 16px;
+    margin-left: 12px;
 
 }
 
@@ -64,7 +64,7 @@ input{
 }
 
 .nodelabel{
-    width: 300px;
+    width: 500px;
     cursor: pointer;
 }
 

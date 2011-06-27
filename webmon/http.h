@@ -229,6 +229,17 @@ namespace llprof{
         return s;
     }
 
+    template<typename TValue>
+    std::ostream& operator<<(std::ostream& s, const std::vector<TValue>& x)
+    {
+        int idx = 0;
+        for(typename std::vector<TValue>::const_iterator iter = x.begin(); iter != x.end(); iter++)
+        {
+            s << idx << ": " << (*iter) << std::endl;
+            idx++;
+        }
+        return s;
+    }
 
 }
 

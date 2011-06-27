@@ -125,7 +125,18 @@ struct RecordMetadata
     string FieldName;
     string Unit;
     string Flags;
-    
+    bool AccumuratedValueFlag;
+
+    void AssocFlag(char c, bool &flag)
+    {
+        flag = (Flags.find(c) != string::npos);
+    }
+
+    void UpdateFlag()
+    {
+        AssocFlag('A', AccumuratedValueFlag);
+    }
+
 };
 inline ostream &operator <<(ostream &s, const RecordMetadata &md)
 {
@@ -185,6 +196,10 @@ class TimeSliceStore
     ThreadStore *ts_;
     int time_number_;
     map< NodeID, vector<ProfileValue> > tree_;
+    
+    vector<ProfileValue> now_values_;
+    NodeID running_node_;
+    
 public:
     void SetThreadStore(ThreadStore *ts);
     void SetTimeNumber(int tn);
@@ -192,8 +207,18 @@ public:
     void SetProfileValue(NodeID nid, int idx, ProfileValue value);    
     void DumpText(ostream &strm);
     
+    
     typedef map< NodeID, vector<ProfileValue> >::iterator map_iterator;
     
+    
+    void SetNowValues(NodeID running_node, const vector<ProfileValue> &pdata)
+    {
+        now_values_ = pdata;
+        running_node_ = running_node;
+    }
+    
+    const vector<ProfileValue> &GetNowValues(){return now_values_;}
+    NodeID GetRunningNode(){return running_node_;}
     
     map_iterator nodes_begin(){return tree_.begin();}
     map_iterator nodes_end(){return tree_.end();}
@@ -206,9 +231,15 @@ class ThreadStore
     
     int start_time_number_;
     vector<TimeSliceStore> time_slice_;
+    vector<ProfileValue> now_values_;
+    NodeID running_node_;
     ThreadID thread_id_;
+
 public:
-    ThreadStore(DataStore *ds): ds_(ds){}
+    ThreadStore(DataStore *ds): ds_(ds)
+    {
+        running_node_ = 0;
+    }
     
     void SetThreadID(ThreadID id){thread_id_ = id;}
     ThreadID GetThreadID(){return thread_id_;}
@@ -221,6 +252,8 @@ public:
     
     DataStore *GetDataStore(){return ds_;}
     void DumpJSON(stringstream &strm, int flag, int p1, int p2);
+    
+    void UpdateNowValues(NodeID running_node, void *pdata);
 };
 
 
@@ -281,7 +314,7 @@ class DataStore: public Lockable
     string target_name_;
     
     map<string, int> member_offset_info_;
-    map<int, RecordMetadata> record_metadata_;
+    vector<RecordMetadata> record_metadata_;
     int num_records_;
 
     map<NameID, string> name_table_;
@@ -291,6 +324,8 @@ class DataStore: public Lockable
 public:
     DataStore(int id);
     ~DataStore();
+    
+    const RecordMetadata &GetRecordMetadata(int idx) const {return record_metadata_[idx];}
     
     int GetCurrentTimeNumber(){return current_time_number_;}
     
