@@ -182,9 +182,49 @@ void DataStore::GetProfileData()
         case MSG_ERROR:
             cout << "Command Error" << endl;
             return;
+            
+        case MSG_PROFILE_DATA:{
+            uint64_t thread_id = res->Get<uint64_t>();
+            
+            map<ThreadID, ThreadStore>::iterator iter = threads_.find(thread_id);
+            if(iter == threads_.end())
+            {
+                threads_.insert(make_pair(thread_id, ThreadStore(this)));
+                iter = threads_.find(thread_id);
+            }
+            
+            (*iter).second.Store(res.get());
+            
+            
+            break;
+        }
         }
     }
     
+}
+
+int DataStore::GetMemberOffsetOf(const string &name)
+{
+    return member_offset_info_[name];
+}
+
+void ThreadStore::Store(MessageBuf *buf)
+{
+    buf->SetCurrentPtr(8);
+    
+    int offset_call_node_id = ds_->GetMemberOffsetOf("pdata.call_node_id");
+    int offset_nameid = ds_->GetMemberOffsetOf("pdata.nameid");
+    while(!buf->IsEOF())
+    {
+        char *p = buf->GetCurrentBufPtr();
+        
+        unsigned int cnid = *(unsigned int *)(p + offset_call_node_id);
+        NameID nameid = *(NameID *)(p + offset_nameid);
+        cout << "[" << cnid << "]  Name:" << nameid << endl;        
+        
+        buf->Seek(ds_->GetMemberOffsetOf("pdata.record_size"));
+    }
+    cout << "End ThreadStore" << endl;
 }
 
 map<int, DataStore*> *gAllDataStore;

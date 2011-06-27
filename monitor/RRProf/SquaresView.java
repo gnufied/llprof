@@ -93,6 +93,8 @@ public class SquaresView extends JPanel implements ChangeListener {
 	}
 	
 	void drawBox(PaintContext ctx) {
+		if(ctx.w < 1 || ctx.h < 1)
+			return;
 		nBoxes++;
 		ctx.rand.setSeed(ctx.r.getID());
 		ctx.rand.setSeed(ctx.rand.nextLong());

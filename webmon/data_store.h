@@ -8,6 +8,7 @@
 #include <string>
 #include <cstring>
 #include <memory>
+#include <assert.h>
 
 namespace llprof{
 
@@ -16,13 +17,14 @@ using namespace std;
 class MessageBuf
 {
     char *buf_;
-    int sz_;
+    int sz_, ptr_;
     
 public:
     MessageBuf()
     {
         buf_ = NULL;
         sz_ = 0;
+        ptr_ = 0;
     }
     ~MessageBuf()
     {
@@ -62,6 +64,28 @@ public:
     {
         return string(buf_+8, sz_-8);
     }
+    
+    int GetCurrentPtr(){return ptr_;}
+    void SetCurrentPtr(int val){ptr_ = val;}
+    
+    char *GetCurrentBufPtr(){return buf_ + ptr_ + 8;}
+    void Seek(int offset)
+    {
+        assert(ptr_ + offset <= sz_);
+        ptr_ += offset;
+    }
+    
+    template<typename T>
+    T Get()
+    {
+        assert(sizeof(T) + ptr_ <= (unsigned int)sz_);
+        T result = *(T *)GetCurrentBufPtr();
+        Seek(sizeof(T));
+        return result;
+    }
+    
+    bool IsEOF(){return GetRemainSize() <= 0;}
+    int GetRemainSize(){return sz_ - ptr_ - 8;}
 };
 
 
@@ -79,6 +103,7 @@ inline ostream &operator <<(ostream &s, const RecordMetadata &md)
 
 typedef unsigned long long NodeID;
 typedef unsigned long long NameID;
+typedef unsigned long long ThreadID;
 
 
 class DataStore;
@@ -95,6 +120,15 @@ public:
     
 };
 
+class ThreadStore
+{
+    DataStore *ds_;
+    map<NodeID, RecordNode> current_tree_;
+public:
+    ThreadStore(DataStore *ds): ds_(ds){}
+    void Store(MessageBuf *buf);
+};
+
 class DataStore
 {
     int socket_;
@@ -109,12 +143,13 @@ class DataStore
     int num_records_;
 
     map<NameID, string> name_table_;
-    map<NodeID, RecordNode> current_tree_;
-
+    map<ThreadID, ThreadStore> threads_;
 
 public:
     DataStore(int id);
     ~DataStore();
+    
+    int GetMemberOffsetOf(const string &name);
     
     int GetID(){return id_;}
     
