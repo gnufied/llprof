@@ -50,7 +50,7 @@ function update_ui_target_list(data)
         {
             $.ajax({
                 type: "POST",
-                url: "/ds/tree/" + g_current_target + "/diff/" + g_now_time_num,
+                url: "/ds/tree/" + g_current_target + "/diff/" + (g_now_time_num+1),
                 data: {},
                 dataType: "json",
                 success: update_ui_cct,
@@ -76,13 +76,35 @@ function update_ui_target_list(data)
 
 function accumurate(dest, src)
 {
-    for(var i = 0; i < src.length; i++)
+    for(var i = 0; i < src.all.length; i++)
     {
-        if(g_metadata[i].flags.indexOf("A") != -1)
-            dest[i] = src[i];
+        if(g_metadata[i].flags.indexOf("S") != -1)
+        {
+            dest.all[i] = src.all[i];
+            dest.cld[i] = src.cld[i];
+        }
         else
-            dest[i] += src[i];
+        {
+            dest.all[i] += src.all[i];
+            dest.cld[i] += src.cld[i];
+        }
     }
+}
+
+function set_running_node(thread, flag)
+{
+    if(!("running_node" in thread))
+        return;
+    
+    var id = thread.running_node;
+    
+    while(id in thread.nodes)
+    {
+        var node = thread.nodes[id];
+        node.running = flag;
+        id = node.pid;
+    }
+    return;
 }
 
 function update_ui_cct(data)
@@ -96,11 +118,15 @@ function update_ui_cct(data)
     {
         var thread = data.threads[i];
         var update_nodes = [];
+        
         if(!((thread.id) in g_target_cct))
         {
             g_target_cct[thread.id] = {id: thread.id, nodes: {}};
         }
         
+        set_running_node(g_target_cct[thread.id], false);
+
+
         g_target_cct[thread.id].now_values = thread.now_values;
         g_target_cct[thread.id].running_node = thread.running_node;
 
@@ -115,7 +141,9 @@ function update_ui_cct(data)
                     pid: node.pid,
                     cid: {},
                     name: node.name,
-                    values: node.values
+                    all: node.all,
+                    cld: node.cld,
+                    running: false
                 };
                 g_target_cct[thread.id].nodes[node.id] = node_stock;
                 if(node.pid != 1)
@@ -123,16 +151,20 @@ function update_ui_cct(data)
             }
             else
             {
-                accumurate(node_stock.values, node.values);
+                accumurate(node_stock, node);
             }
             update_nodes.push(node_stock);
         }
+
+        set_running_node(g_target_cct[thread.id], true);
+
         update_threads[thread.id] = update_nodes;
     }
+    var updateStartUpdatePanel = new Date();
     update_main_panel(update_threads);
+    var updateEnd = new Date();
+    document.title = "Merge: " + (updateStartUpdatePanel - updateStart) + "ms  Pane:" + (updateEnd - updateStartUpdatePanel);
     setTimeout(update_ui, 1000);
-    var timedur = (new Date()) - updateStart;
-    document.title = "Time: " + timedur + "ms";
 }
 
 function show_target(id)
@@ -162,7 +194,6 @@ function update_main_panel(updated)
 Panels = {};
 
 Panels.cct = {
-    
     get_thread_elem: function(thread_id)
     {
         var thread_elem = $("#th_" + thread_id);
@@ -212,8 +243,18 @@ Panels.cct = {
     {
         if(!node_elem || node_elem.length == 0)
             return;
-        var node = g_target_cct[node_elem.attr('threadid')].nodes[node_elem.attr('nodeid')];
-        node_elem.children(".nodelabel").html("Node:" + html_esc(node.name) + " times = " + node.values);
+        var thread = g_target_cct[node_elem.attr('threadid')];
+        var node = thread.nodes[node_elem.attr('nodeid')];
+        
+        // ad hoc
+        var nsval = node.all[0];
+        if(node.running)
+            nsval += (thread.now_values[1] - node.all[1]);
+            
+        var sval = nsval / (1000 * 1000 * 1000);
+        node_elem.children(".nodelabel").html("<img src='/files/"+(node.running?"running":"normal")+".png' />" + html_esc(node.name) + " " + sval + "s");
+        
+        // node_elem.children(".nodelabel").html("Node:" + html_esc(node.name) + " v: " + node.all + ";  " + node.cld);
     },
     
     show: function()
@@ -264,9 +305,17 @@ Panels.cct = {
         Panels.cct.update_label(node_elem);
         
         node_elem.children(".nodelabel")
-            .click(function(){
+            .click(function(e){
                     Panels.cct.open_node_elem($(this).parent()); 
-            });
+                    e.preventDefault();
+            })
+            .mouseenter(function(e){
+                $(this).addClass("nodelabel_hover");
+            })
+            .mouseleave(function(e){
+                $(this).removeClass("nodelabel_hover");
+            })
+        ;
         return node_elem;
     },
     
@@ -293,6 +342,57 @@ Panels.cct = {
 };
 
 
+Panels.list = {
+    show: function()
+    {
+        $("#mainpanel").html("<table id='mtbl'></table>");
+        for(var thread_id in g_target_cct)
+        {
+            var thread_elem = Panels.cct.get_thread_elem(thread_id);
+            for(var key in g_target_cct[thread_id].nodes)
+            {
+                var node = g_target_cct[thread_id].nodes[key];
+                Panels.list.update_item(thread_id, node);
+            }
+        }
+        
+    },
+    update_size: function()
+    {
+    },
+    
+    update_item: function(thread_id, node)
+    {
+        var item_id = "li_" + thread_id + "_" + node.name;
+        if($("#" + item_id).length == 0)
+            $('#mtbl').append("<tr id='"+item_id+"'><td class='col_1'></td><td class='col_2'></td><td class='col_3'></td></tr>");
+        
+        var elem = $("#" + item_id);
+        elem.children("tbody .col_1").html(node.name);
+        elem.children("tbody .col_2").html(node.all.join(','));
+        
+    },
+    update: function(updated)
+    {
+        for(var thread_id in updated)
+        {
+            var thread_elem = Panels.cct.get_thread_elem(thread_id);
+            Panels.cct.update_thread_label(thread_elem);
+            for(var j = 0; j < updated[thread_id].length; j++)
+            {
+                var node = updated[thread_id][j];
+                Panels.list.update_item(thread_id, node);
+            }
+        }
+        Panels.cct.updating = false;
+    },
+    
+    hide: function()
+    {
+        
+    }
+};
+
 function fit_panel()
 {
     var win_h = $(window).height();
@@ -318,7 +418,6 @@ $(function(){
             data: {"host": $('#server_address').val()},
             dataType: "json",
             success: function(data){
-                alert("Connected:" + data);
             }
         });
     });

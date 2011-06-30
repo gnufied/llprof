@@ -81,8 +81,39 @@ function profile(depth)
     setTimeout(function(){profile(depth+1);}, 1000);
 }
 
+function tbl_profile()
+{
+    $("#cvs").html("<table id='t'></table>");
+    tbl_profile_next();
+}
+
+gArray = {};
+function tbl_profile_next()
+{
+    var startTime = new Date();
+    var r = Math.random();
+    var added = 0;
+    for(var i = 0; i < 1000; i++)
+    {
+ 
+        var id = "table_item_" + i;
+        var elem = $("#"+id);
+        if(elem.length == 0)
+        {
+            $("#t").append("<tr id='"+id+"'><td class='col_i'>"+i+"</td><td class='col_id'>"+id+"</td><td class='col_r'> 5q5w4fq6gwqeg gwewrh4 </td></tr>");
+            added++;
+            elem = $("#"+id);
+        }
+        gArray[id] = "" + r;
+        //elem.children("tr .col_r").html("" + r);
+    }
+    var endTime = new Date();
+    alert(" Time: " + (endTime - startTime) + "ms added:" + added);
+    setTimeout(tbl_profile_next, 4000);
+}
+
 $(function(){
     $("#cvs")
         .width(800).height(800);
-    profile(1);
+    tbl_profile(1);
 });

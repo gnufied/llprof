@@ -8,8 +8,10 @@
 #include <string>
 #include <cstring>
 #include <memory>
+#include <set>
 #include <assert.h>
 #include "boost_wrap.h"
+#include <iostream>
 
 namespace llprof{
 
@@ -125,7 +127,7 @@ struct RecordMetadata
     string FieldName;
     string Unit;
     string Flags;
-    bool AccumuratedValueFlag;
+    bool AccumulatedValueFlag, StaticValueFlag;
 
     void AssocFlag(char c, bool &flag)
     {
@@ -134,7 +136,8 @@ struct RecordMetadata
 
     void UpdateFlag()
     {
-        AssocFlag('A', AccumuratedValueFlag);
+        AssocFlag('A', AccumulatedValueFlag);
+        AssocFlag('S', StaticValueFlag);
     }
 
 };
@@ -142,6 +145,8 @@ inline ostream &operator <<(ostream &s, const RecordMetadata &md)
 {
     return s << "(Metadata: " << md.FieldName << " (" << md.Unit << ", " << md.Flags << ")";
 }
+
+
 
 typedef unsigned long NodeID;
 typedef unsigned long long NameID;
@@ -151,15 +156,21 @@ typedef signed long long ProfileValue;
 class DataStore;
 class ThreadStore;
 
-class RecordNode
+class RecordNodeBasic
 {
+protected:
     DataStore *ds_;
     NodeID id_, parent_id_;
     NameID node_name_;
-    vector<ProfileValue> values_;
+    vector<ProfileValue> all_values_, children_values_;
+    bool running_;
+    virtual void UpdateDataStore(){};
     
 public:
-    RecordNode();
+    RecordNodeBasic()
+    {
+        running_ = false;
+    }
     void SetDataStore(DataStore *ds);
     NodeID GetNodeID() const {return id_;}
     void SetNodeID(NodeID id){ id_ = id; }
@@ -170,32 +181,92 @@ public:
     NameID GetNameID() const { return node_name_; }
     void SetNameID(NameID id){ node_name_ = id; }
     
-    ProfileValue GetProfileValue(int idx)
-    {
-        return values_[idx];
-    }
-    void SetProfileValue(int idx, ProfileValue value)
-    {
-        values_[idx] = value;
-    }
-    ProfileValue AddProfileValue(int idx, ProfileValue adding_value)
-    {
-        return (values_[idx] += adding_value);
-    }
-    vector<ProfileValue> &GetValuesVector() {return values_;}
-    const vector<ProfileValue> &GetValuesVector() const {return values_;}
-    void Accumulate(const vector<ProfileValue> &values);
+    void SetRunning(bool f){running_ = f;}
+    bool IsRunning() const {return running_;}
     
+    
+    vector<ProfileValue> &GetAllValues(){return all_values_;}
+    vector<ProfileValue> &GetChildrenValues(){return children_values_;}
+    const vector<ProfileValue> &GetAllValues() const {return all_values_;}
+    const vector<ProfileValue> &GetChildrenValues() const {return children_values_;}
+
     DataStore *GetDataStore() const {return ds_;}
+    
+    void Accumulate(const RecordNodeBasic &rhs);
+    
+    virtual void PrintToStream(ostream &out) const;
+    
+    bool ValuesEquals(const RecordNodeBasic &rhs);
 };
 
-void write_json(stringstream &strm, const RecordNode &node);
+inline ostream &operator <<(ostream &s, const RecordNodeBasic &md)
+{
+    md.PrintToStream(s);
+    return s;
+}
+
+class RecordNode: public RecordNodeBasic
+{
+    vector<ProfileValue> temp_values_;
+    bool dirty_;
+    set<NodeID> children_id_;
+
+protected:
+    virtual void UpdateDataStore();
+
+public:
+    RecordNode()
+    {
+        dirty_ = false;
+    }
+    
+    vector<ProfileValue> &GetTempValues(){return temp_values_;}
+    const vector<ProfileValue> &GetTempValues() const {return temp_values_;}
+
+    
+    void AddChildID(NodeID cid){children_id_.insert(cid);}
+    
+    typedef set<NodeID>::iterator children_iterator;
+    children_iterator children_begin()
+    {
+        return children_id_.begin();
+    }
+    children_iterator children_end()
+    {
+        return children_id_.end();
+    }
+
+    void SetDirty(bool f){dirty_ = f;}
+    bool IsDirty() const {return dirty_;}
+    
+
+    void SetTempValues(const vector<ProfileValue> &value)
+    {
+        assert(temp_values_.size() == value.size());
+        temp_values_ = value;
+    }
+    
+    void ClearTempValues()
+    {
+        for(vector<ProfileValue>::iterator it = GetTempValues().begin(); it != GetTempValues().end(); it++)
+        {
+            (*it) = 0;
+        }
+    }
+    
+    void PrintToStream(ostream &out) const;
+
+};
+
+
+
+void write_json(stringstream &strm, const RecordNodeBasic &node);
 
 class TimeSliceStore
 {
     ThreadStore *ts_;
     int time_number_;
-    map< NodeID, vector<ProfileValue> > tree_;
+    map< NodeID, RecordNodeBasic > tree_;
     
     vector<ProfileValue> now_values_;
     NodeID running_node_;
@@ -203,12 +274,13 @@ class TimeSliceStore
 public:
     void SetThreadStore(ThreadStore *ts);
     void SetTimeNumber(int tn);
-    ProfileValue GetProfileValue(NodeID nid, int idx);
-    void SetProfileValue(NodeID nid, int idx, ProfileValue value);    
+    
+    RecordNodeBasic *GetNodeFromID(NodeID id, bool add = true);
+    
     void DumpText(ostream &strm);
     
     
-    typedef map< NodeID, vector<ProfileValue> >::iterator map_iterator;
+    typedef map< NodeID, RecordNodeBasic >::iterator map_iterator;
     
     
     void SetNowValues(NodeID running_node, const vector<ProfileValue> &pdata)
@@ -241,10 +313,20 @@ public:
         running_node_ = 0;
     }
     
+    RecordNode *GetRootNode();
+    
+    RecordNode *GetNodeFromID(NodeID nid)
+    {
+        map<NodeID, RecordNode>::iterator it = current_tree_.find(nid);
+        if(it == current_tree_.end())
+            return NULL;
+        return &(*it).second;
+    }
+    
     void SetThreadID(ThreadID id){thread_id_ = id;}
     ThreadID GetThreadID(){return thread_id_;}
     
-    void Store(intrusive_ptr<MessageBuf> buf);
+    void Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf> nowinfo_buf);
     
     TimeSliceStore *GetTimeSlice(int ts);
     
@@ -254,6 +336,16 @@ public:
     void DumpJSON(stringstream &strm, int flag, int p1, int p2);
     
     void UpdateNowValues(NodeID running_node, void *pdata);
+    
+    void MarkNodeDirty(RecordNode *node);
+    
+    void MarkRunningNodes();
+    void UnmarkRunningNodes();
+    
+    void ClearDirtyNode(RecordNode *node, TimeSliceStore *tss);
+    
+    TimeSliceStore *MergeTimeSlice(map<NodeID, RecordNodeBasic> &integrated, int from, int to);
+    void CheckAllTimeSlice();
 };
 
 
@@ -368,11 +460,19 @@ public:
     bool GetProfileData();
 
     void DumpText(ostream &strm);
+    void DumpText()
+    {
+        cerr << "[DataStore Dump]" << endl;
+        DumpText(cerr);
+        cerr << endl;
+    }
     
     void DumpJSON(stringstream &strm, int flag, int p1, int p2);
 
     void Lock();
     void Unlock();
+    
+    void CheckAllTimeSlice();
 };
 
 const int DF_CURRENT_TREE = 1;
