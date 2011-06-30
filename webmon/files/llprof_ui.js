@@ -346,16 +346,11 @@ Panels.list = {
     show: function()
     {
         $("#mainpanel").html("<table id='mtbl'></table>");
-        for(var thread_id in g_target_cct)
-        {
-            var thread_elem = Panels.cct.get_thread_elem(thread_id);
-            for(var key in g_target_cct[thread_id].nodes)
-            {
-                var node = g_target_cct[thread_id].nodes[key];
-                Panels.list.update_item(thread_id, node);
-            }
-        }
-        
+        this.list = {
+        };
+        this.orders = [];
+        this.num_items = 0;
+        this.unorderd = {};
     },
     update_size: function()
     {
@@ -364,14 +359,26 @@ Panels.list = {
     update_item: function(thread_id, node)
     {
         var item_id = "li_" + thread_id + "_" + node.name;
-        if($("#" + item_id).length == 0)
-            $('#mtbl').append("<tr id='"+item_id+"'><td class='col_1'></td><td class='col_2'></td><td class='col_3'></td></tr>");
+        if(!(item_id in this.list))
+        {
+            this.list[item_id] = {
+                opos: -1
+            };
+            this.orders.push(this.list[item_id]);
+            $('#mtbl').append("<tr id='tbl_"+(this.orders.length-1)+"'><td class='col_1'></td><td class='col_2'></td><td class='col_3'></td></tr>");
+        }
         
         var elem = $("#" + item_id);
         elem.children("tbody .col_1").html(node.name);
         elem.children("tbody .col_2").html(node.all.join(','));
-        
     },
+
+    sort: function()
+    {
+        var unorderd = [];
+        this.list[item_id];
+    },
+
     update: function(updated)
     {
         for(var thread_id in updated)
