@@ -23,17 +23,16 @@ td{
 
 .panel{
     border: 1px solid black;
+    float: left;
 }
 
 
 #sidepanel{
     width: 200px;
-    float: left;
     border-right: none;
 }
 
 #mainpanel{
-    float: left;
     width: auto;
 }
 

@@ -345,6 +345,7 @@ public:
     void ClearDirtyNode(RecordNode *node, TimeSliceStore *tss);
     
     TimeSliceStore *MergeTimeSlice(map<NodeID, RecordNodeBasic> &integrated, int from, int to);
+    const vector<ProfileValue> *GetStartProfileValue(int from, int to);
     void CheckAllTimeSlice();
 };
 

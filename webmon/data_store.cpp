@@ -368,6 +368,7 @@ void DataStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
 
         record_metadata_dict.add<stringstream &>(lexical_cast<string>(i), dmd.strm());
     }
+    data.add<int>("numrecords", record_metadata_.size());
     data.add<stringstream &>("metadata", record_metadata_dict.strm());
 }
 
@@ -399,10 +400,26 @@ void write_json(stringstream &strm, const RecordNodeBasic &node)
 
 }
 
+
+const vector<ProfileValue> *ThreadStore::GetStartProfileValue(int from, int to)
+{
+    TimeSliceStore *tss = NULL;
+    for(int t = from-1; t <= to; t++)
+    {
+        tss = GetTimeSlice(t);
+        if(tss)
+            break;
+    }
+    if(!tss)
+        return NULL;
+    return &tss->GetNowValues();
+}
+
 TimeSliceStore *ThreadStore::MergeTimeSlice(map<NodeID, RecordNodeBasic> &integrated, int from, int to)
 {
     TimeSliceStore *last_tss = NULL;
     int nslice = 0;
+
     for(int t = from; t <= to; t++)
     {
         TimeSliceStore *tss = GetTimeSlice(t);
@@ -428,6 +445,8 @@ TimeSliceStore *ThreadStore::MergeTimeSlice(map<NodeID, RecordNodeBasic> &integr
         }
     } 
     cout << "Merged: " << nslice << endl;
+    
+   
     return last_tss;
 }
 
@@ -492,6 +511,8 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
         }
         map<NodeID, RecordNodeBasic> integrated;
         TimeSliceStore *last_tss = MergeTimeSlice(integrated, p1, p2);
+        const vector<ProfileValue> *start_values = GetStartProfileValue(p1,p2);
+        
         
         for(map<NodeID, RecordNodeBasic>::iterator it = integrated.begin(); it != integrated.end(); it++)
             nodes.add<RecordNodeBasic &>((*it).second);
@@ -502,6 +523,17 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
             stringstream tmp;
             ProfileValuesToStream(tmp, last_tss->GetNowValues());
             store.add<stringstream &>("now_values", tmp);
+            if(start_values)
+            {
+                tmp.str("");
+                ProfileValuesToStream(tmp, *start_values);
+                store.add<stringstream &>("start_values", tmp);
+                cout << " *** Succeed to get start_values" << endl;
+            }
+            else
+            {
+                cout << " *** Failure to get start_values" << endl;
+            }
             store.add<unsigned int>("running_node", last_tss->GetRunningNode());
         }
     }
