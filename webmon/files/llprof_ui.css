@@ -6,6 +6,7 @@
 body{
     padding: 0;
     margin: 1;
+    overflow: none;
 }
 
 input{
@@ -24,6 +25,7 @@ td{
 .panel{
     border: 1px solid black;
     float: left;
+    overflow: hidden;
 }
 
 
@@ -85,5 +87,13 @@ td{
 
 .children{
 
+}
+
+.sqv_sq{
+    border: 1px solid black;
+    position: absolute;
+    overflow: none;
+    text-align: center;
+    vertical-align: middle;
 }
 

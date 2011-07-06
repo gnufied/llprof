@@ -4,9 +4,15 @@
         <link rel="stylesheet" href="/files/llprof_ui.css" type="text/css" />
         
         <link href="/files/css/smoothness/jquery-ui-1.8.14.custom.css" rel="stylesheet" type="text/css" />
+        <link href="/files/visualize.css" rel="stylesheet" type="text/css" />
+        <link href="/files/visualize-light.css" rel="stylesheet" type="text/css" />
         
         <script src="/files/jquery.min.js" type="text/javascript"></script>
         <script src="/files/jquery-ui-1.8.14.custom.min.js" type="text/javascript"></script>
+        <script src="/files/visualize.jquery.js" type="text/javascript"></script>
+        
+        
+        
         <script src="/files/llprof_ui.js" type="text/javascript"></script>
     </head>
     <body>
@@ -22,23 +28,25 @@
                 <th>State</th>
             </tr>
             </table>
+            <div id="debug2">
+            </div>
         
         </div>
         <div class="panel" id="modepanel">
-            <div style="height: 120px; width: 200px; float: left; border-right: 1px solid black;">
+            <div style="height: 100px; width: 300px; float: left; border-right: 1px solid black;">
                 <select id="view_select" name='view'>
-                    <option value='cct'>CCT</option>
+                    <option value='cct' selected='selected'>CCT</option>
                     <option value='list'>Method List</option>
                     <option value='square'>Squares</option>
                 </select><br />
                 <input type='checkbox' id="check_realtime" checked="checked" /> Real-time <br />
-                <input id="command_text" type="text" value="" /><button id="command_do">実行</button>
+                <input id="command_text" type="text" value="" size="16" /><button id="command_do">実行</button>
             </div>
-            <div style="height: 120px; float: left;">
-                <span>時間</span><br />
+            <div style="height: 100px; float: left;">
+                <span>時間: </span><span id="timebar_value"></span> <span id="timebar_timecaption"></span><br />
                 <div id="timebar" style="margin-left: 10px; width: 400px;">
                 </div>
-                <span>時間幅</span><br />
+                <span>時間幅: </span><span id="timewidthbar_value"></span><br />
                 <div id="timewidthbar" style="margin-left: 10px; width: 400px;">
                 </div>
                 

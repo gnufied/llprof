@@ -8,7 +8,8 @@
 time_val_t get_time_now_nsec()
 {
 	struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC, &tp);
+	//clock_gettime(CLOCK_MONOTONIC, &tp);
+	clock_gettime(CLOCK_REALTIME, &tp);
     
 	return ((time_val_t)tp.tv_sec)*1000*1000*1000 + ((time_val_t)tp.tv_nsec);
 }
