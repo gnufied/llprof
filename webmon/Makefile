@@ -1,11 +1,11 @@
 
 
-SOURCES = ../llprofcommon/network.cpp http.cpp webmon.cpp data_store.cpp
+SOURCES = ../llprofcommon/network.cpp ../llprofcommon/measurement.cpp http.cpp webmon.cpp data_store.cpp
 LIBPATH = 
 INCPATH = 
 
 CFLAGS = -g -Wall $(INCPATH)
-LDFLAGS = -lpthread
+LDFLAGS = -lpthread -lrt
 OUT = webmon
 
 

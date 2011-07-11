@@ -97,3 +97,13 @@ td{
     vertical-align: middle;
 }
 
+
+/* List Panel */
+
+td.number{
+    text-align: right;
+}
+
+#list_body_head th{
+    height: 2px;
+}

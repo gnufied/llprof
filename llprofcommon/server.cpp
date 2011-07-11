@@ -215,11 +215,8 @@ void *llprof_server_thread(void *p)
 	struct sockaddr_in listening_addr;
 	int ret;
 
-#   ifdef _WIN32
-        WSADATA wsaData;
-        WSAStartup(MAKEWORD(2,0), &wsaData);
-#   endif
-
+    InitSocketSubSystem();
+    
 	listening_sock = socket(AF_INET, SOCK_STREAM, 0);
 	if(listening_sock == -1)
 		perror("socket");
@@ -268,9 +265,8 @@ void *llprof_server_thread(void *p)
         printf("Disconnected\n");
         #endif
 	}
-#   ifdef _WIN32
-        WSACleanup();
-#   endif
+    
+    FinSocketSubSystem();
 }
 
 

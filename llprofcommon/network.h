@@ -13,4 +13,10 @@ bool SendProfMessage(int sock, int msg_id, const void *buf, int buf_sz);
 
 void HexDump(char *buf, int size);
 
+
+void InitSocketSubSystem();
+void FinSocketSubSystem();
+int MakeServerSocket(int port);
+
+
 #endif // LLPROF_NETWORK_H

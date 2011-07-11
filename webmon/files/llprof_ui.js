@@ -1,13 +1,17 @@
 
 g_current_target = null;
-g_max_time_num = 0;
 g_active_panel = null;
 g_default_panel = "cct";
-g_realtime_mode = true;
-g_select_timenum = 0;
 g_target_cct = null;
 g_now_info = {};
 g_metadata = {};
+
+g_timenav = {
+    real_time: true,
+    select_time: 0,
+    select_width: 0,
+    max_time: 0
+}
 
 g_need_update_counter = 0;
 
@@ -39,30 +43,13 @@ function html_esc(s){
 	return s;
 }
 
-function set_realtime_mode(flag)
-{
-    if(g_realtime_mode == flag)
-        return;
-    g_realtime_mode = flag;
 
-    g_target_cct = null;
-
-}
-
-function set_select_timenum(v)
-{
-    g_select_timenum = v;
-    if(!g_realtime_mode)
-    {
-        g_target_cct = {};
-    }
-}
 
 
 function count_update_counter()
 {
     g_need_update_counter--;
-    if(g_need_update_counter <= 0)
+    if(g_need_update_counter < 0)
     {
         g_need_update_counter = 5;
         update_ui();
@@ -105,13 +92,13 @@ function update_ui_target_list(data)
 
     if(g_current_target)
     {
-        if(g_realtime_mode)
+        if(g_timenav.real_time)
         {
             if(g_target_cct)
             {
                 $.ajax({
                     type: "POST",
-                    url: "/ds/tree/" + g_current_target + "/diff/" + (g_max_time_num+1),
+                    url: "/ds/tree/" + g_current_target + "/diff/" + (g_timenav.max_time+1),
                     data: {},
                     dataType: "json",
                     success: update_ui_cct,
@@ -130,12 +117,12 @@ function update_ui_target_list(data)
             }
         }else
         {
-            var time_selection_start = g_select_timenum + 1 - $('#timewidthbar').slider("option", "value");
-            if(time_selection_start > g_select_timenum)
-                time_selection_start = g_select_timenum;
+            var time_selection_start = g_timenav.select_time + 1 - g_timenav.select_width;
+            if(time_selection_start > g_timenav.select_time)
+                time_selection_start = g_timenav.select_time;
             $.ajax({
                 type: "POST",
-                url: "/ds/tree/" + g_current_target + "/diff/" + time_selection_start + "/" + g_select_timenum,
+                url: "/ds/tree/" + g_current_target + "/diff/" + time_selection_start + "/" + g_timenav.select_time,
                 data: {},
                 dataType: "json",
                 success: update_ui_cct,
@@ -148,19 +135,19 @@ function update_ui_target_list(data)
     }
 }
 
-function accumurate(dest, src)
+function accumurate(dest, src, thread)
 {
     for(var i = 0; i < src.all.length; i++)
     {
         if(g_metadata[i].flags.indexOf("S") != -1)
         {
-            dest.all[i] = src.all[i];
-            dest.cld[i] = src.cld[i];
+            dest.all[i] = get_profile_value_all(thread, src, i);
+            dest.cld[i] = get_profile_value_cld(thread, src, i);
         }
         else
         {
-            dest.all[i] += src.all[i];
-            dest.cld[i] += src.cld[i];
+            dest.all[i] += get_profile_value_all(thread, src, i);
+            dest.cld[i] += get_profile_value_cld(thread, src, i);
         }
     }
 }
@@ -200,10 +187,10 @@ function update_ui_cct(data)
     var updateStart = new Date();
     var update_threads = {};
     
-    if(g_realtime_mode)
+    if(g_timenav.real_time)
     {
-        g_max_time_num = data.timenum;
-        $('#timebar').slider("option", "max", g_max_time_num);
+        g_timenav.max_time = data.timenum;
+        $('#timebar').slider("option", "max", g_timenav.max_time);
     }
     else
     {
@@ -230,7 +217,6 @@ function update_ui_cct(data)
         set_running_node(g_target_cct[thread.id], false);
 
 
-        $('#debug').html(thread.now_values.join(','));
         g_target_cct[thread.id].now_values = thread.now_values;
         g_target_cct[thread.id].start_values = thread.start_values;
         g_target_cct[thread.id].running_node = thread.running_node;
@@ -238,8 +224,11 @@ function update_ui_cct(data)
         if(!timecaption_updated)
         {
             timecaption_updated = true;
-            var msval = parseInt(thread.now_values[1]) / 1000 / 1000;
-            $('#timebar_timecaption').html(fmt_date(new Date(msval)));
+            if(thread.now_values[1])
+            {
+                var msval = parseInt(thread.now_values[1]) / 1000 / 1000;
+                $('#timebar_timecaption').html(fmt_date(new Date(msval)));
+            }
         }
 
         for(var j = 0; j < thread.nodes.length; j++)
@@ -278,7 +267,7 @@ function update_ui_cct(data)
     }
     var updateStartUpdatePanel = new Date();
 
-    if(g_realtime_mode)
+    if(g_timenav.real_time)
     {
         update_main_panel(update_threads);
     }
@@ -300,25 +289,12 @@ function show_target(id)
 {
     g_target_cct = null;
     g_current_target = id;
-    g_max_time_num = 0;
-    show_main_panel();
+    g_timenav.max_time = 0;
+    update_nav();
     fit_panel();
 }
 
 
-function show_main_panel(panelname)
-{
-    if(g_active_panel && Panels[g_active_panel])
-    {
-        Panels[g_active_panel].hide();
-    }
-    if(!panelname && !g_active_panel)
-        g_active_panel = g_default_panel;
-    else if(panelname)
-        g_active_panel = panelname;
-    Panels[g_active_panel].init();
-    Panels[g_active_panel].tree_reload();
-}
 
 function update_main_panel(updated)
 {
@@ -339,7 +315,7 @@ function get_profile_value_all(thread, node, index)
     if(node.running)
     {
         var node_start_time = node.all[1];
-        if(!g_realtime_mode && thread.start_values && node.all[1] < thread.start_values[1])
+        if(!g_timenav.real_time && thread.start_values && node.all[1] < thread.start_values[1])
         {
             node_start_time = thread.start_values[1];
         }
@@ -347,15 +323,21 @@ function get_profile_value_all(thread, node, index)
          val += (thread.now_values[1] - node_start_time);
     }
     
-    if(!g_realtime_mode && thread.start_values &&  val > (thread.now_values[1] - thread.start_values[1]))
+    if(!g_timenav.real_time && thread.start_values &&  val > (thread.now_values[1] - thread.start_values[1]))
          val = thread.now_values[1] - thread.start_values[1];
     return val;
 }
 
 function get_profile_value_cld(thread, node, index)
 {
-    return node.all[0] - node.cld[0];
+    return node.cld[index];
 }
+
+function get_profile_value_self(thread, node, index)
+{
+    return get_profile_value_all(thread, node, index) - get_profile_value_cld(thread, node, index);
+}
+
 
 Panels = {};
 
@@ -425,7 +407,8 @@ Panels.cct = {
         if(!thread_elem || thread_elem.length == 0)
             return;
         var thread = g_target_cct[thread_elem.attr('threadid')];
-        thread_elem.children(".nodelabel").html("Thread: " + thread.id + " Running:" + thread.running_node + " NowValue:" + thread.now_values.join(', '));
+        thread_elem.children(".nodelabel").html("Thread: " + thread.id); 
+            // + " Running:" + thread.running_node + " NowValue:" + thread.now_values.join(', '));
     },
     
     update_label: function(node_elem)
@@ -525,35 +508,70 @@ Panels.list = {
     
     init: function()
     {
-        $("#mainpanel").html("<table></table><div><table id='mtbl'></table></div>");
-        this.list = {
+        this.namecol = {
+            width: 200
         };
-        this.ordered = [];
-        this.num_items = 0;
-        this.unordered = [];
+        this.col = [
+            {idx: 0, mode: "all", width: 140},
+            {idx: 0, mode: "self", width: 140}
+        ];
+        $("#mainpanel").html("<table id='mtbl_header'></table><div id='mtbl_scroll'><table id='mtbl'></table></div>");
+        $('#mtbl_scroll').css('overflow', 'scroll');
+    },
 
+    update_column: function()
+    {
+        $('#mtbl_header').html("<th id='lhead_name'>name</th>");
+        $("#list_body_head").html("<th id='lbodyhead_name'></th>");
+        
+        $('#lhead_name').width(this.namecol.width);
+        $('#lbodyhead_name').width(this.namecol.width);
+        for(var i = 0; i < this.col.length; i++)
+        {
+            var col = this.col[i];
+            $('#mtbl_header').append("<th id='lhead_"+i+"'>" + g_metadata[col.idx].field_name + "(" + col.mode + ")</th>");
+            $("#lhead_"+i).width(col.width);
+            $("#list_body_head").append("<th id='lbodyhead_"+i+"'> </th>");
+            $("#lbodyhead_"+i).width(col.width);
+        }
+        
+        
+        this.update_view();
     },
 
     tree_reload: function()
     {
+        this.list = {};
+        this.ordered = [];
+        this.num_items = 0;
+        this.unordered = [];
+        $('#mtbl').html("<tr id='list_body_head'></tr>");
+        
+        
         for(var thread_id in g_target_cct)
         {
-            for(var key in g_target_cct[thread_id].nodes)
+            var thread = g_target_cct[thread_id];
+            for(var key in thread.nodes)
             {
-                var node = g_target_cct[thread_id].nodes[key];
-                this.update_item(thread_id, node);
+                var node = thread.nodes[key];
+                this.update_item(thread, node);
             }
         }
-        
+        this.update_column();
     },
 
     update_size: function()
     {
+        var mp = $('#mainpanel');
+        $('#mtbl_scroll').height(mp.height());
+        $('#mtbl_scroll').width(mp.width());
     },
     
-    update_item: function(thread_id, node)
+    update_item: function(thread, node)
     {
+        var thread_id = thread.id;
         var item_id = "li_" + thread_id + "_" + node.name;
+        
         if(!(item_id in this.list))
         {
             var node_stock = this.list[item_id] = {
@@ -567,7 +585,7 @@ Panels.list = {
                 node_stock.all[i] = node_stock.cld[i] = 0;
             this.unordered.push(node_stock);
             this.num_items++;
-            $('#mtbl').append("<tr id='tbl_"+(this.num_items-1)+"'><td class='col_1'></td><td class='col_2'></td><td class='col_3'></td></tr>");
+            $('#mtbl').append("<tr id='tbl_"+(this.num_items-1)+"'><td>0</td></tr>");
         }
         else
         {
@@ -578,7 +596,7 @@ Panels.list = {
                 node_stock.opos = -1;
             }
         }
-        accumurate(node_stock, node);
+        accumurate(node_stock, node, thread);
     },
 
     merge_orderd: function()
@@ -613,6 +631,32 @@ Panels.list = {
 
     },
 
+    update_view: function()
+    {
+        this.merge_orderd();
+
+        for(var i = 0; i < this.ordered.length && i < 50; i++)
+        {
+            var node_stock = this.ordered[i];
+            var html = "<td>" + node_stock.name + "</td>";
+
+            for(var j = 0; j < this.col.length; j++)
+            {
+                var col = this.col[j];
+                html += "<td class='number'>";
+                
+                // get_profile_value_** は使わない
+                //  -> accumurateで既につかってる
+                if(col.mode == "all")
+                    html += node_stock.all[col.idx];
+                else if(col.mode == "self")
+                    html += (node_stock.all[col.idx] - node_stock.cld[col.idx]);
+                html += "</td>";
+            }
+            $('#tbl_' + i).html(html);
+        }
+    },
+    
     update: function(updated)
     {
         for(var thread_id in updated)
@@ -622,18 +666,11 @@ Panels.list = {
             for(var j = 0; j < updated[thread_id].nodes.length; j++)
             {
                 var node = updated[thread_id].nodes[j];
-                Panels.list.update_item(thread_id, node);
+                Panels.list.update_item(updated[thread_id], node);
+                
             }
         }
-        this.merge_orderd();
-
-        for(var i = 0; i < this.ordered.length && i < 30; i++)
-        {
-            var node_stock = this.ordered[i];
-            $("#tbl_"+i).children("tbody .col_1").html(node_stock.name);
-            $("#tbl_"+i).children("tbody .col_2").html(node_stock.all[0]);
-            $("#tbl_"+i).children("tbody .col_3").html(node_stock.all[1]);
-        }
+        this.update_view();
     },
     
     hide: function()
@@ -657,9 +694,9 @@ Panels.square = {
             .height(30)
         ;
         $('#sq_depth_bar').slider({
-            min: 1,
-            max: 20,
-            startValue: 1,
+            min: 2,
+            max: 30,
+            startValue: 5,
             slide: function(e, ui){
                 if(!Panels.square.update_timer_enabled)
                 {
@@ -730,7 +767,7 @@ Panels.square = {
             .html(data.node.name + " (" + data.node.id + ")")
         ;
 
-        var allval = 0;
+        var allval = 0.0;
         var values = {};
         for(var key in data.node.cid)
         {
@@ -738,13 +775,16 @@ Panels.square = {
             values[cnode.id] = get_profile_value_all(data.thread, cnode, 0);
             allval += values[cnode.id];
         }
-        
+        if(get_profile_value_all(data.thread, data.node, 0) > allval)
+            allval = get_profile_value_all(data.thread, data.node, 0);
+
         var psum = 0.0;
         var cur_color = data.color + 1;
         for(var key in data.node.cid)
         {
-            var p = values[key] / allval;
             var cnode = data.node.cid[key];
+            var p = values[cnode.id] / allval;
+            
             
             var next_data = {
                 target_elem: data.target_elem,
@@ -816,29 +856,6 @@ function fit_panel()
     
     if(g_active_panel)
         Panels[g_active_panel].update_size();
-}
-
-function init_modepanel()
-{
-    $('#timebar').slider({
-        min: 0,
-        max: 10,
-        startValue: 0,
-        slide: function(e, ui){
-            set_select_timenum(ui.value);
-            g_need_update_counter = 0;
-            $("#timebar_value").html(ui.value);
-        }
-    });
-    $('#timewidthbar').slider({
-        min: 1,
-        max: 20,
-        startValue: 1,
-        slide: function(e, ui){
-            $("#timewidthbar_value").html(ui.value);
-        }
-    });
-
 }
 
 function do_command(cmd)
@@ -996,23 +1013,68 @@ function fetch_table_data(req)
 }
 
 
+//////////////////////////////////////////////////////////////////////////
+// Navigator
+//////////////////////////////////////////////////////////////////////////
+
+
+function update_nav()
+{
+    var panelname = $("#view_select").val();
+    if(g_active_panel && Panels[g_active_panel])
+    {
+        Panels[g_active_panel].hide();
+    }
+    if(!panelname && !g_active_panel)
+        g_active_panel = g_default_panel;
+    else if(panelname)
+        g_active_panel = panelname;
+    Panels[g_active_panel].init();
+    Panels[g_active_panel].tree_reload();
+
+
+
+    var before_real_time = g_timenav.real_time;
+    g_timenav.real_time = ($("#check_realtime").attr("checked") ? true : false);
+    g_timenav.select_time = $("#timebar").slider("option", "value");
+    g_timenav.select_width = $("#timewidthbar").slider("option", "value");
+
+    $("#timebar_value").html(g_timenav.select_time);
+    $("#timewidthbar_value").html(g_timenav.select_width);
+
+    if(!before_real_time || !g_timenav.real_time)
+    {
+        g_target_cct = null;
+    }
+    g_need_update_counter = 1;
+
+
+
+
+}
+
 
 $(function(){
     setTimeout(update_ui, 500);
     fit_panel();
     $(window).resize(fit_panel);
-    init_modepanel();
+
+    $('#timebar').slider({
+        min: 0,
+        max: 10,
+        startValue: 0,
+        slide: update_nav
+    });
+    $('#timewidthbar').slider({
+        min: 1,
+        max: 20,
+        startValue: 1,
+        slide: update_nav
+    });
         
-    $("#view_select").change(function(){
-        show_main_panel($(this).val());
-    });
+    $("#view_select").change(update_nav);
     
-    $('#check_realtime').click(function(){
-        if($(this).attr("checked"))
-            set_realtime_mode(true);
-        else
-            set_realtime_mode(false);
-    });
+    $('#check_realtime').click(update_nav);
     
     $('#command_do').click(function(){
         do_command($('#command_text').val());

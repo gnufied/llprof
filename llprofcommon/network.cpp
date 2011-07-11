@@ -111,4 +111,56 @@ void HexDump(char *buf, int size)
     printf("\n");
 }
 
+void InitSocketSubSystem()
+{
+#   ifdef _WIN32
+        WSADATA wsaData;
+        WSAStartup(MAKEWORD(2,0), &wsaData);
+#   endif
+
+}
+
+void FinSocketSubSystem()
+{
+#   ifdef _WIN32
+        WSACleanup();
+#   endif
+}
+
+
+int MakeServerSocket(int port)
+{
+	int listening_sock;
+	struct sockaddr_in listening_addr;
+	int ret;
+
+	listening_sock = socket(AF_INET, SOCK_STREAM, 0);
+	if(listening_sock == -1)
+		perror("socket");
+
+	memset(&listening_addr, 0, sizeof(listening_addr));
+	listening_addr.sin_family = AF_INET;
+	listening_addr.sin_addr.s_addr = INADDR_ANY;
+	listening_addr.sin_port = htons(port);
+
+	int yes_val = 1;
+	setsockopt(
+		listening_sock,
+		SOL_SOCKET,	
+		SO_REUSEADDR,
+		(const char *)&yes_val,
+		sizeof(yes_val)
+	);
+
+	ret = bind(listening_sock, (struct sockaddr *)&listening_addr, sizeof(listening_addr));
+	if(ret == -1)
+		perror("bind");
+	ret = listen(listening_sock, 10);
+	if(ret == -1)
+	{
+		printf("listen error: %s", strerror(errno));
+		perror("listen");
+	}
+    return listening_sock;
+}
 

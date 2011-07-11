@@ -6,6 +6,7 @@
 #include "boost_wrap.h"
 #include "data_store.h"
 #include "../llprofcommon/network.h"
+#include "../llprofcommon/measurement.h"
 #include "../llprofcommon/llprof_const.h"
 #include "http.h"
 
@@ -162,7 +163,7 @@ void* DataStore::ThreadMain()
             return NULL;
         }
     }
-
+    cout << "DataStore Started." << endl;
     
     intrusive_ptr<MessageBuf> res;
 
@@ -208,9 +209,16 @@ void* DataStore::ThreadMain()
         target_name_ = res->AsString();
     }
     
+    cout << "Target:" << target_name_ << endl;
     
-    while(GetProfileData())
+    while(true)
     {
+        time_val_t start_tv = get_time_now_nsec();
+        if(!GetProfileData())
+            break;
+        
+        cout << "Collecting time:" << double(get_time_now_nsec() - start_tv)/1000000000.0 << endl;
+        
         sleep(1);
     }
     
@@ -746,13 +754,54 @@ TimeSliceStore *ThreadStore::GetTimeSlice(int ts)
 }
 
 
+void *DataStoreAcceptThreadMain(void *);
 map<int, DataStore*> *gAllDataStore;
 int gDataStoreIDSeq;
+pthread_t g_datastore_server_thread;
+
 void InitDataStore()
 {
     gAllDataStore = new map<int, DataStore*>();
     gDataStoreIDSeq = 0;
+
+    pthread_create(&g_datastore_server_thread, NULL, DataStoreAcceptThreadMain, NULL);
+    pthread_detach(g_datastore_server_thread);
 }
+
+
+DataStore *NewDataStore()
+{
+    gDataStoreIDSeq++;
+    DataStore *ds = new DataStore(gDataStoreIDSeq);
+    Locker lk(ds);
+    (*gAllDataStore)[gDataStoreIDSeq] = ds;
+    return ds;
+}
+
+
+void *DataStoreAcceptThreadMain(void *)
+{
+    int lsock = MakeServerSocket(12300);
+
+	while(1)
+	{
+		struct sockaddr_in client_addr;
+		int len = sizeof(client_addr);
+		int sock = accept(lsock,  (struct sockaddr *)&client_addr, (socklen_t *)&len);
+        if(sock <= 0)
+        {
+            cout << "Accept Error" << endl;
+            break;
+        }
+        cout << "Socket Accepted:" << sock << endl;
+        DataStore *ds = NewDataStore();
+        Locker lk(ds);
+        ds->SetConnectedSocket(sock);
+        ds->StartThread();
+	}
+    return NULL;
+}
+
 
 bool DataStoreRequest(std::stringstream &out, string &mime, const std::vector<std::string> &path,
         const std::map<std::string,std::string> &data)
@@ -766,13 +815,8 @@ bool DataStoreRequest(std::stringstream &out, string &mime, const std::vector<st
         if(connect_to.size() == 1)
             connect_to.push_back("12321");
         
-        gDataStoreIDSeq++;
-        DataStore *ds = new DataStore(gDataStoreIDSeq);
+        DataStore *ds = NewDataStore();
         Locker lk(ds);
-
-
-
-        (*gAllDataStore)[gDataStoreIDSeq] = ds;
         ds->SetConnectTo(connect_to[0], connect_to[1]);
         ds->StartThread();
         ::write_json(out, "OK");
