@@ -208,18 +208,22 @@ void* DataStore::ThreadMain()
         res = SendQueryInfoRequest(INFO_PROFILE_TARGET);
         target_name_ = res->AsString();
     }
-    
-    cout << "Target:" << target_name_ << endl;
+
+    int interval = 10;
+    if(getenv("WEBMON_INTERVAL"))
+    {
+        interval = atoi(getenv("WEBMON_INTERVAL"));
+        if(interval < 1)
+            interval = 1;
+    }
     
     while(true)
     {
         time_val_t start_tv = get_time_now_nsec();
         if(!GetProfileData())
             break;
-        
-        cout << "Collecting time:" << double(get_time_now_nsec() - start_tv)/1000000000.0 << endl;
-        
-        sleep(1);
+
+        sleep(interval);
     }
     
 
