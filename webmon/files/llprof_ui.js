@@ -86,7 +86,7 @@ function update_ui_target_list(data)
             
             var line = $("#target_item_" + data[i].id);
             line.attr("host_id", data[i].id);
-            line.click(function(e){ show_target(line.attr("host_id")); });
+            line.click(function(e){ show_target( $(this).attr("host_id")); });
         }
         var target_line = $("#target_item_" + data[i].id);
         
