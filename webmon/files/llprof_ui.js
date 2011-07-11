@@ -6,6 +6,10 @@ g_target_cct = null;
 g_now_info = {};
 g_metadata = {};
 
+
+var THREAD_NODE_ID = 0;
+var ROOT_NODE_ID = 1;
+
 g_timenav = {
     real_time: true,
     select_time: 0,
@@ -247,7 +251,7 @@ function update_ui_cct(data)
                     running: false
                 };
                 g_target_cct[thread.id].nodes[node.id] = node_stock;
-                if(node.pid != 1)
+                if(node.pid != THREAD_NODE_ID)
                     g_target_cct["" + thread.id].nodes[node.pid].cid[node.id] = node_stock;
             }
             else
@@ -315,12 +319,15 @@ function get_profile_value_all(thread, node, index)
     if(node.running)
     {
         var node_start_time = node.all[1];
+        if( node_start_time == 0)
+            return node.all[0];
+        
         if(!g_timenav.real_time && thread.start_values && node.all[1] < thread.start_values[1])
         {
             node_start_time = thread.start_values[1];
         }
         
-         val += (thread.now_values[1] - node_start_time);
+        val += (thread.now_values[1] - node_start_time);
     }
     
     if(!g_timenav.real_time && thread.start_values &&  val > (thread.now_values[1] - thread.start_values[1]))
@@ -387,7 +394,7 @@ Panels.cct = {
         if(auto_add)
         {
             var parent_elem;
-            if(parent_node_id == 1)
+            if(parent_node_id == THREAD_NODE_ID)
                 parent_elem = Panels.cct.get_thread_elem(thread_id);
             else
                 parent_elem = $("#node_th_" + thread_id + "_" + parent_node_id);
@@ -683,6 +690,8 @@ Panels.list = {
 
 Panels.square = {
     
+    depth_value: 5,
+    
     init: function()
     {
         this.update_timer_enabled = false;
@@ -696,7 +705,7 @@ Panels.square = {
         $('#sq_depth_bar').slider({
             min: 2,
             max: 30,
-            startValue: 5,
+            value: this.depth_value,
             slide: function(e, ui){
                 if(!Panels.square.update_timer_enabled)
                 {
@@ -722,10 +731,15 @@ Panels.square = {
             .height($("#mainpanel").height() - 30)
             .html("")
         ;
+        if(!g_target_cct || !("0" in g_target_cct))
+        {
+            return;
+        }
+        
         var thread = g_target_cct["0"];
         if(!thread)
             return;
-        var root = thread.nodes[2];
+        var root = thread.nodes[ROOT_NODE_ID];
         if(!root)
             return;
 
@@ -742,6 +756,8 @@ Panels.square = {
             color: 0,
             max_depth: $('#sq_depth_bar').slider("option", "value"),
         });
+        
+        this.depth_value = $('#sq_depth_bar').slider("option", "value");
 
     },
     

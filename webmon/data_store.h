@@ -308,10 +308,7 @@ class ThreadStore
     ThreadID thread_id_;
 
 public:
-    ThreadStore(DataStore *ds): ds_(ds)
-    {
-        running_node_ = 0;
-    }
+    ThreadStore(DataStore *ds);
     
     RecordNode *GetRootNode();
     

@@ -336,11 +336,15 @@ int client_handler(int sock)
     return 0;
 }
 
+int g_thread_counter = 0;
 
-int start_client_handler(int sock)
+void *start_client_handler(void *sock_p)
 {
+    int sock = reinterpret_cast<unsigned long long int>(sock_p);
+    g_thread_counter++;
     client_handler(sock);
-    return 0;
+    g_thread_counter--;
+    return NULL;
 }
 
 void* http_server_main(void *p)
@@ -374,7 +378,11 @@ void* http_server_main(void *p)
         int client_sock = accept(server_sock, (struct sockaddr *) &client_addr, (socklen_t *)&sz_client_addr);
 		// cout << "Accept from " << inet_ntoa(client_addr.sin_addr) << endl;
 
-        start_client_handler(client_sock);
+        pthread_t client_handler_thread;
+        pthread_create(&client_handler_thread, NULL, start_client_handler, (void *)client_sock);
+        pthread_detach(client_handler_thread);
+        
+        cout << "# of threads: " << g_thread_counter << endl;
 	}
     return NULL;
 }

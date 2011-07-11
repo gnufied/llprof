@@ -319,6 +319,18 @@ end_of_loop:
     return true;
 }
 
+
+ThreadStore::ThreadStore(DataStore *ds): ds_(ds)
+{
+    running_node_ = 0;
+    RecordNode &node = current_tree_[1];
+    node.SetDataStore(ds_);
+    node.SetNodeID(1);
+    node.SetParentNodeID(0);
+    node.SetNameID(0);
+
+}
+
 void ThreadStore::UpdateNowValues(NodeID running_node, void *pdata)
 {
     running_node_ = running_node;
@@ -579,6 +591,7 @@ void ThreadStore::UnmarkRunningNodes()
 void ThreadStore::MarkRunningNodes()
 {
     RecordNode *node = GetNodeFromID(running_node_);
+    MarkNodeDirty(node);
     while(node)
     {
         node->SetRunning(true);
@@ -714,7 +727,7 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
 
 RecordNode *ThreadStore::GetRootNode()
 {
-    RecordNode *root = GetNodeFromID(2);
+    RecordNode *root = GetNodeFromID(1);
     return root;
 }
 

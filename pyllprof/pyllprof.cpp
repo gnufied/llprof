@@ -9,6 +9,10 @@ using namespace std;
 
 #include "llprof.h"
 
+#if PY_MAJOR_VERSION >= 3
+#define IS_PY3K
+#endif
+
 
 static PyObject * minit(PyObject *self, PyObject *args)
 {
@@ -34,6 +38,7 @@ int pyllprof_tracefunc(PyObject *obj, PyFrameObject *frame, int what, PyObject *
     return 0;
 }
 
+#if PY_MAJOR_VERSION >= 3
 char* wstr_to_str(Py_UNICODE *s)
 {
     char *buf = new char[256];
@@ -50,7 +55,6 @@ char* wstr_to_str(Py_UNICODE *s)
 
 const char *python_name_func(nameid_t nameid, void *p)
 {
-
     if(!nameid)
         return "(null)";
     PyCodeObject *f_code = (PyCodeObject *)nameid;
@@ -59,20 +63,32 @@ const char *python_name_func(nameid_t nameid, void *p)
     
     char *name = wstr_to_str(wstr);
     return name;
+}
+#else
 
+const char *python_name_func(nameid_t nameid, void *p)
+{
+    if(!nameid)
+        return "(null)";
+    PyCodeObject *f_code = (PyCodeObject *)nameid;
+    return PyString_AS_STRING(f_code->co_name);
 }
 
-static PyMethodDef ext_methods[] = {
+#endif
+
+static PyMethodDef pyllprof_methods[] = {
     {"__init__", minit, METH_VARARGS, "Initialize"},
     {NULL, NULL}
 };
+
+#if PY_MAJOR_VERSION >= 3
 
 static struct PyModuleDef moduledef = {
         PyModuleDef_HEAD_INIT,
         "pyllprof",
         NULL,
         0,
-        ext_methods,
+        pyllprof_methods,
         NULL,
         NULL,
         NULL,
@@ -82,13 +98,23 @@ static struct PyModuleDef moduledef = {
 
 PyMODINIT_FUNC
 PyInit_pyllprof(void)
+#else
+extern "C" void
+initpyllprof(void)
+#endif
 {
+#if PY_MAJOR_VERSION >= 3
     PyObject *module = PyModule_Create(&moduledef);
+#else
+    PyObject *module = Py_InitModule("pyllprof", pyllprof_methods);
+#endif
 
     llprof_set_time_func(get_time_now_nsec);
     llprof_set_name_func(python_name_func);
     llprof_init();
     PyEval_SetProfile(pyllprof_tracefunc, NULL);
     
+#if PY_MAJOR_VERSION >= 3
     return module;
+#endif
 }

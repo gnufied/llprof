@@ -15,8 +15,8 @@ module1 = Extension(
     libraries = [
         "rt"
     ],
-    extra_compile_args = ["-O3"],
-    extra_link_args = ["-O3"],
+    extra_compile_args = ["-g"],
+    extra_link_args = ["-g"],
 )
 
 setup (name = 'pyllprof',
