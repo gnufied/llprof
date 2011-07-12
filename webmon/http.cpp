@@ -74,7 +74,7 @@ bool parse_query_string(map<string, string> &result, string query_string)
 bool recv_string(int sock, string &result, int maxlen)
 {
     char *buf = new char[maxlen];
-    int n = recv(sock, buf, maxlen, 0);
+    int n = recv(sock, buf, maxlen, MSG_NOSIGNAL);
     if(n <= 0)
     {
         delete []buf;

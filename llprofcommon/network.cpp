@@ -164,3 +164,32 @@ int MakeServerSocket(int port)
     return listening_sock;
 }
 
+
+
+unsigned long long int HashStr(const string &s)
+{
+    return HashStr(s.c_str());
+}
+
+unsigned long long int HashStr(const char *s)
+{
+    unsigned long long int result = 0;
+    int len = strlen(s);
+    int p = 0;
+    result += len;
+    while(p < len)
+    {
+        if(len - p >= sizeof(unsigned long long int))
+        {
+            result += *(unsigned long long int *)(s+p) << ((p/7)%7);
+            p += 7;
+        }else
+        {
+            result += (int)*(char *)(s+p) << ((p*8) % 7);
+            p += 1;
+        }
+    }
+    return result;
+}
+
+

@@ -19,4 +19,7 @@ void FinSocketSubSystem();
 int MakeServerSocket(int port);
 
 
+unsigned long long int HashStr(const char *s);
+unsigned long long int HashStr(const std::string &s);
+
 #endif // LLPROF_NETWORK_H

@@ -181,6 +181,8 @@ public:
     NameID GetNameID() const { return node_name_; }
     void SetNameID(NameID id){ node_name_ = id; }
     
+    string GetNameString();
+    
     void SetRunning(bool f){running_ = f;}
     bool IsRunning() const {return running_;}
     
@@ -210,6 +212,7 @@ class RecordNode: public RecordNodeBasic
     vector<ProfileValue> temp_values_;
     bool dirty_;
     set<NodeID> children_id_;
+    NodeID gnid_;
 
 protected:
     virtual void UpdateDataStore();
@@ -218,7 +221,12 @@ public:
     RecordNode()
     {
         dirty_ = false;
+        gnid_ = 0;
     }
+    
+    
+    NodeID GetGNID() const {return gnid_;}
+    void SetGNID(NodeID gnid){gnid_ = gnid;}
     
     vector<ProfileValue> &GetTempValues(){return temp_values_;}
     const vector<ProfileValue> &GetTempValues() const {return temp_values_;}
@@ -272,6 +280,8 @@ class TimeSliceStore
     NodeID running_node_;
     
 public:
+    ThreadStore *GetThreadStore(){return ts_;}
+
     void SetThreadStore(ThreadStore *ts);
     void SetTimeNumber(int tn);
     
@@ -298,6 +308,7 @@ public:
 
 class ThreadStore
 {
+protected:
     DataStore *ds_;
     map<NodeID, RecordNode> current_tree_;
     
@@ -307,8 +318,11 @@ class ThreadStore
     NodeID running_node_;
     ThreadID thread_id_;
 
+
 public:
     ThreadStore(DataStore *ds);
+    virtual ~ThreadStore(){}
+    
     
     RecordNode *GetRootNode();
     
@@ -326,6 +340,8 @@ public:
     void Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf> nowinfo_buf);
     
     TimeSliceStore *GetTimeSlice(int ts);
+    TimeSliceStore *GetCurrentTimeSlice();
+    
     
     void DumpText(ostream &strm);
     
@@ -344,7 +360,11 @@ public:
     TimeSliceStore *MergeTimeSlice(map<NodeID, RecordNodeBasic> &integrated, int from, int to);
     const vector<ProfileValue> *GetStartProfileValue(int from, int to);
     void CheckAllTimeSlice();
+
+    RecordNode* AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID name_id);
+
 };
+
 
 
 class Lockable
@@ -394,6 +414,8 @@ public:
 
 class DataStore: public Lockable
 {
+protected:
+    bool recv_, first_received_;
     int socket_;
     int id_;
     int current_time_number_;
@@ -408,14 +430,28 @@ class DataStore: public Lockable
     int num_records_;
 
     map<NameID, string> name_table_;
-    map<ThreadID, ThreadStore> threads_;
+    map<ThreadID, ThreadStore *> threads_;
 
 
 public:
     DataStore(int id);
-    ~DataStore();
+    virtual ~DataStore();
+    
+    typedef map<ThreadID, ThreadStore *>::iterator thread_store_iterator;
+    
+    thread_store_iterator thread_store_begin()
+    {
+        return threads_.begin();
+    }
+
+    thread_store_iterator thread_store_end()
+    {
+        return threads_.end();
+    }
     
     const RecordMetadata &GetRecordMetadata(int idx) const {return record_metadata_[idx];}
+    
+    vector<RecordMetadata> &GetRecordMetadataVector(){return record_metadata_;}
     
     int GetCurrentTimeNumber(){return current_time_number_;}
     
@@ -434,6 +470,11 @@ public:
         return "<Unknown>";
     }
     
+    void SetNameID(NameID id, const string &name)
+    {
+        name_table_[id] = name;
+    }
+    
     int GetMemberOffsetOf(const string &name);
     
     int GetID(){return id_;}
@@ -442,9 +483,10 @@ public:
     string GetTargetHost(){return host_;}
     void SetConnectedSocket(int sock);
     void SetConnectTo(string host, string port);
-    void StartThread();
+    void StartReceive();
+
     void Close();
-    void *ThreadMain();
+    bool ReceiveLoop();
     
     void SendMessage(unsigned int msg_type, void *msg = NULL, int msg_size = 0);
     intrusive_ptr<MessageBuf> RecvMessage();
@@ -471,10 +513,35 @@ public:
     void Unlock();
     
     void CheckAllTimeSlice();
+    NodeID TouchGNID(ThreadStore *ts, RecordNode *node);
+    
+};
+
+
+class GlobalThreadStore: public ThreadStore
+{
+    NodeID seq_num_;
+    map<NodeID, NodeID> gnid_to_seq_;
+public:
+    GlobalThreadStore(DataStore *ds): ThreadStore(ds){seq_num_ = 1;}
+    
+    NodeID GNIDToSeq(NodeID gnid);
+    
+    void Integrate();
+};
+
+
+class GlobalDataStore: public DataStore
+{
+public:
+    GlobalDataStore(int id);
+    void Integrate();
 };
 
 const int DF_CURRENT_TREE = 1;
 const int DF_DIFF_TREE = 2;  // Get differencial Tree p1 to p2
+
+void AddGNID(NodeID gnid, const string &name);
 
 void InitDataStore();
 bool DataStoreRequest(stringstream &out, string &mime, const vector<string> &path,

@@ -2,7 +2,7 @@
 #include <iostream>
 #include <memory>
 #include <algorithm>
-
+#include <boost/crc.hpp>
 #include "boost_wrap.h"
 #include "data_store.h"
 #include "../llprofcommon/network.h"
@@ -15,6 +15,11 @@ namespace llprof{
 
 
 
+void *DataStoreAcceptThreadMain(void *);
+map<int, DataStore*> *gAllDataStore;
+int gDataStoreIDSeq;
+pthread_t g_datastore_server_thread;
+GlobalDataStore *gGlobalDataStore;
 
 
 void RecordNodeBasic::SetDataStore(DataStore *ds)
@@ -54,6 +59,8 @@ DataStore::DataStore(int id)
     socket_ = 0;
     closed_ = false;
     current_time_number_ = 0;
+    recv_ = false;
+    first_received_ = false;
 }
 
 DataStore::~DataStore()
@@ -74,15 +81,37 @@ void DataStore::SetConnectTo(string host, string port)
     port_ = port;
 }
 
-void* DataStore_thread_main(void *data)
+void* DataStore_ReceiveThread(void *data)
 {
-    return ((DataStore*)data)->ThreadMain();
+    int interval = 10;
+    if(getenv("WEBMON_INTERVAL"))
+    {
+        interval = atoi(getenv("WEBMON_INTERVAL"));
+        if(interval < 1)
+            interval = 1;
+    } 
+    
+    
+    while(true)
+    {
+        sleep(interval);
+        time_val_t start_tv = get_time_now_nsec();
+        for(map<int,DataStore*>::iterator iter = gAllDataStore->begin(); iter != gAllDataStore->end(); iter++)
+        {
+            (*iter).second->ReceiveLoop();
+
+        }
+        if(gGlobalDataStore)
+            gGlobalDataStore->Integrate();
+        
+        cout << "Fetch Time: " << (double(get_time_now_nsec() - start_tv) / 1000.0 / 1000.0 / 1000.0 ) << endl;
+    }
+    return NULL;
 }
 
-void DataStore::StartThread()
+void DataStore::StartReceive()
 {
-    pthread_create(&conn_thread_, NULL, DataStore_thread_main, this);
-    pthread_detach(conn_thread_);
+    recv_ = true;
 }
 
 void DataStore::Close()
@@ -150,84 +179,91 @@ intrusive_ptr<MessageBuf> DataStore::SendQueryInfoRequest(int request_val)
 
 
 
-void* DataStore::ThreadMain()
+bool DataStore::ReceiveLoop()
 {
-    if(socket_ == 0)
-    {
-        socket_ = SocketConnectTo(host_, port_);
-        if(socket_ <= 0)
-        {
-            socket_ = 0;
-            closed_ = true;
-            cout << "Failed to connect:" << host_ << ":" << port_ << endl;
-            return NULL;
-        }
-    }
-    cout << "DataStore Started." << endl;
-    
-    intrusive_ptr<MessageBuf> res;
+    if(!recv_)
+        return false;
 
-    // オフセット値の取得
+    if(!first_received_)
     {
-        res = SendQueryInfoRequest(INFO_DATA_SLIDE);
-        stringstream strm(res->AsString());
+        first_received_ = true;
+        if(socket_ == 0)
+        {
+            socket_ = SocketConnectTo(host_, port_);
+            if(socket_ <= 0)
+            {
+                socket_ = 0;
+                closed_ = true;
+                cout << "Failed to connect:" << host_ << ":" << port_ << endl;
+                recv_ = false;
+                return false;
+            }
+        }
+        cout << "DataStore Started." << endl;
         
-        while(ws(strm), !strm.eof())
+        intrusive_ptr<MessageBuf> res;
+
+        // オフセット値の取得
         {
-            pair<string, int> entry;
-            strm >> entry.first >> entry.second;
-            member_offset_info_.insert(entry);
+            res = SendQueryInfoRequest(INFO_DATA_SLIDE);
+            stringstream strm(res->AsString());
+            
+            while(ws(strm), !strm.eof())
+            {
+                pair<string, int> entry;
+                strm >> entry.first >> entry.second;
+                member_offset_info_.insert(entry);
+            }
+        }
+
+        // レコードメタデータの取得
+        {
+            record_metadata_.clear();
+            res = SendQueryInfoRequest(INFO_RECORD_METAINFO);
+            stringstream strm(res->AsString());
+            strm >> num_records_;
+            record_metadata_.resize(num_records_);
+            cout << "Num Metadata:" << num_records_ << endl;
+            while(ws(strm), !strm.eof())
+            {
+                int idx = 0;
+                strm >> idx;
+                RecordMetadata &md = record_metadata_[idx];
+                strm
+                    >> md.FieldName
+                    >> md.Unit
+                    >> md.Flags
+                    ;
+                md.UpdateFlag();
+            }
+            cout << "V:" << record_metadata_ << endl;
+        }
+
+        // プロファイルターゲット名の取得
+        {
+            res = SendQueryInfoRequest(INFO_PROFILE_TARGET);
+            target_name_ = res->AsString();
+        }
+
+        int interval = 10;
+        if(getenv("WEBMON_INTERVAL"))
+        {
+            interval = atoi(getenv("WEBMON_INTERVAL"));
+            if(interval < 1)
+                interval = 1;
         }
     }
 
-    // レコードメタデータの取得
+
+    if(!GetProfileData())
     {
-        record_metadata_.clear();
-        res = SendQueryInfoRequest(INFO_RECORD_METAINFO);
-        stringstream strm(res->AsString());
-        strm >> num_records_;
-        record_metadata_.resize(num_records_);
-        cout << "Num Metadata:" << num_records_ << endl;
-        while(ws(strm), !strm.eof())
-        {
-            int idx = 0;
-            strm >> idx;
-            RecordMetadata &md = record_metadata_[idx];
-            strm
-                >> md.FieldName
-                >> md.Unit
-                >> md.Flags
-                ;
-            md.UpdateFlag();
-        }
-        cout << "V:" << record_metadata_ << endl;
+        recv_ = false;
+        return false;
     }
 
-    // プロファイルターゲット名の取得
-    {
-        res = SendQueryInfoRequest(INFO_PROFILE_TARGET);
-        target_name_ = res->AsString();
-    }
-
-    int interval = 10;
-    if(getenv("WEBMON_INTERVAL"))
-    {
-        interval = atoi(getenv("WEBMON_INTERVAL"));
-        if(interval < 1)
-            interval = 1;
-    }
-    
-    while(true)
-    {
-        time_val_t start_tv = get_time_now_nsec();
-        if(!GetProfileData())
-            break;
-
-        sleep(interval);
-    }
     
 
-    return NULL;
+    return true;
 }
 
 bool DataStore::GetProfileData()
@@ -270,7 +306,7 @@ bool DataStore::GetProfileData()
                     if(query_names.size() == 0)
                         query_names.push_back(0);
                     query_names.push_back(nameid);
-                    name_table_[nameid] = "<Asking>";
+                    SetNameID(nameid, "<Asking>");
                 }
                 
                 res->Seek(pdata_record_size);
@@ -298,7 +334,8 @@ end_of_loop:
         {
             string s;
             getline(names_strm, s);
-            name_table_[query_names[i+1]] = s;
+            SetNameID(query_names[i+1], s);
+
         }
     }
 
@@ -306,17 +343,17 @@ end_of_loop:
         iter != buf_for_threads.end(); iter++)
     {
 
-        map<ThreadID, ThreadStore>::iterator tpos = threads_.find((*iter).first);
+        map<ThreadID, ThreadStore *>::iterator tpos = threads_.find((*iter).first);
         if(tpos == threads_.end())
         {
-            threads_.insert(make_pair((*iter).first, ThreadStore(this)));
+            threads_.insert(make_pair((*iter).first, new ThreadStore(this)));
             tpos = threads_.find((*iter).first);
-            (*tpos).second.SetThreadID((*iter).first);
+            (*tpos).second->SetThreadID((*iter).first);
         }
-        ThreadStore &ts = (*tpos).second;
+        ThreadStore *ts = (*tpos).second;
         // Store profile data
         intrusive_ptr<MessageBuf> nibuf = nowinfo_buf_for_threads[(*iter).first];
-        ts.Store((*iter).second, nibuf);
+        ts->Store((*iter).second, nibuf);
 
 
     }
@@ -332,6 +369,7 @@ ThreadStore::ThreadStore(DataStore *ds): ds_(ds)
     node.SetNodeID(1);
     node.SetParentNodeID(0);
     node.SetNameID(0);
+    node.SetGNID(1);
 
 }
 
@@ -362,9 +400,9 @@ void DataStore::DumpText(ostream &strm)
     strm << "[record_metadata] " << endl << record_metadata_ << endl;
     strm << "[NameTable]" << endl << name_table_ << endl << endl;
 
-    for(map<ThreadID, ThreadStore>::iterator it = threads_.begin(); it != threads_.end(); it++)
+    for(map<ThreadID, ThreadStore *>::iterator it = threads_.begin(); it != threads_.end(); it++)
     {
-        (*it).second.DumpText(strm);
+        (*it).second->DumpText(strm);
     }
     strm << "<End>" << endl;
 }
@@ -374,10 +412,10 @@ void DataStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
     JsonDict data(strm);
     data.add("timenum", GetCurrentTimeNumber());
     JsonList threads;
-    for(map<ThreadID, ThreadStore>::iterator it = threads_.begin(); it != threads_.end(); it++)
+    for(map<ThreadID, ThreadStore *>::iterator it = threads_.begin(); it != threads_.end(); it++)
     {
         stringstream item;
-        (*it).second.DumpJSON(item, flag, p1, p2);
+        (*it).second->DumpJSON(item, flag, p1, p2);
         threads.add<stringstream &>(item);
     }
     data.add<stringstream &>("threads", threads.strm());
@@ -603,6 +641,16 @@ void ThreadStore::MarkRunningNodes()
     }
 }
 
+RecordNode *ThreadStore::AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID nameid)
+{
+    RecordNode &node = current_tree_[cnid];
+    node.SetDataStore(ds_);
+    node.SetNodeID(cnid);
+    node.SetParentNodeID(parent_cnid);
+    node.SetNameID(nameid);
+    return &node;
+}
+
 void ThreadStore::Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf> nibuf)
 {
 
@@ -640,12 +688,8 @@ void ThreadStore::Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf>
         map<NodeID, RecordNode>::iterator iter = current_tree_.find(cnid);
         if(iter == current_tree_.end())
         {
-            RecordNode &node = current_tree_[cnid];
-            node.SetDataStore(ds_);
-            node.SetNodeID(cnid);
-            node.SetParentNodeID(parent_cnid);
-            node.SetNameID(nameid);
-            
+            RecordNode *node = AddCurrentNode(cnid, parent_cnid, nameid);
+            ds_->TouchGNID(this, node);
             if(RecordNode *parent = GetNodeFromID(parent_cnid))
                 parent->AddChildID(cnid);
             
@@ -662,10 +706,15 @@ void ThreadStore::Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf>
         buf->Seek(pdata_record_size);
     }
     
-    TimeSliceStore *tss = GetTimeSlice(ds_->GetCurrentTimeNumber());
+    TimeSliceStore *tss = GetCurrentTimeSlice();
     assert(tss);
     tss->SetNowValues(running_node_, now_values_);
     ClearDirtyNode(GetRootNode(), tss);
+}
+
+TimeSliceStore *ThreadStore::GetCurrentTimeSlice()
+{
+    return GetTimeSlice(ds_->GetCurrentTimeNumber());
 }
 
 void ThreadStore::MarkNodeDirty(RecordNode *node)
@@ -691,6 +740,8 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
         return;
 
     RecordNodeBasic *tss_node = tss->GetNodeFromID(node->GetNodeID());
+    assert(tss_node);
+
     for(RecordNode::children_iterator it = node->children_begin(); it != node->children_end(); it++)
     {
         RecordNode *child = GetNodeFromID(*it);
@@ -771,17 +822,27 @@ TimeSliceStore *ThreadStore::GetTimeSlice(int ts)
 }
 
 
-void *DataStoreAcceptThreadMain(void *);
-map<int, DataStore*> *gAllDataStore;
-int gDataStoreIDSeq;
-pthread_t g_datastore_server_thread;
+string RecordNodeBasic::GetNameString()
+{
+    assert(ds_);
+    return ds_->GetNameFromID(GetNameID());
+}
+
+
 
 void InitDataStore()
 {
     gAllDataStore = new map<int, DataStore*>();
     gDataStoreIDSeq = 0;
 
+    gGlobalDataStore = new GlobalDataStore(gDataStoreIDSeq);
+    (*gAllDataStore)[gDataStoreIDSeq] = gGlobalDataStore;
+
+
     pthread_create(&g_datastore_server_thread, NULL, DataStoreAcceptThreadMain, NULL);
+    pthread_detach(g_datastore_server_thread);
+
+    pthread_create(&g_datastore_server_thread, NULL, DataStore_ReceiveThread, NULL);
     pthread_detach(g_datastore_server_thread);
 }
 
@@ -799,7 +860,7 @@ DataStore *NewDataStore()
 void *DataStoreAcceptThreadMain(void *)
 {
     int lsock = MakeServerSocket(12300);
-
+    cout << "Socket created." << endl;
 	while(1)
 	{
 		struct sockaddr_in client_addr;
@@ -814,7 +875,7 @@ void *DataStoreAcceptThreadMain(void *)
         DataStore *ds = NewDataStore();
         Locker lk(ds);
         ds->SetConnectedSocket(sock);
-        ds->StartThread();
+        ds->StartReceive();
 	}
     return NULL;
 }
@@ -835,7 +896,7 @@ bool DataStoreRequest(std::stringstream &out, string &mime, const std::vector<st
         DataStore *ds = NewDataStore();
         Locker lk(ds);
         ds->SetConnectTo(connect_to[0], connect_to[1]);
-        ds->StartThread();
+        ds->StartReceive();
         ::write_json(out, "OK");
         return true;
     }
@@ -925,6 +986,8 @@ RecordNodeBasic *TimeSliceStore::GetNodeFromID(NodeID id, bool add)
             return NULL;
         RecordNodeBasic &new_node = tree_[id];
         new_node.SetDataStore(ts_->GetDataStore());
+        new_node.SetNodeID(id);
+        new_node.SetParentNodeID(0);
         return &new_node;
     }
     return &(*it).second;
@@ -944,7 +1007,7 @@ void RecordNodeBasic::PrintToStream(ostream &out) const
 
 void RecordNode::PrintToStream(ostream &out) const
 {
-    out << "R ID:" << id_ << " p:" << parent_id_ << " " << ds_->GetNameFromID(node_name_) << "[" << node_name_ << "] ";
+    out << "R ID:" << id_ << " GNID:" << gnid_ << " p:" << parent_id_ << " " << ds_->GetNameFromID(node_name_) << "[" << node_name_ << "] ";
     
     for(int i = 0; i < ds_->GetNumProfileValues(); i++)
     {
@@ -958,11 +1021,154 @@ void RecordNode::PrintToStream(ostream &out) const
 
 void DataStore::CheckAllTimeSlice()
 {
-    for(map<ThreadID, ThreadStore>::iterator it = threads_.begin(); it != threads_.end(); it++)
+    for(map<ThreadID, ThreadStore *>::iterator it = threads_.begin(); it != threads_.end(); it++)
     {
-        (*it).second.CheckAllTimeSlice();
+        (*it).second->CheckAllTimeSlice();
     }
 
+}
+
+unsigned long long int HashStrHard(const string &str)
+{
+    crc_basic<64> crc64( 0x1021F0A7542AEC14, 0xFFFFFFFFFFFFFFFF, 0, false, false );
+    crc64.process_bytes( str.c_str(), str.length() );
+    return crc64.checksum();
+}
+
+NodeID DataStore::TouchGNID(ThreadStore *ts, RecordNode *node)
+{
+    if(node->GetGNID())
+        return node->GetGNID();
+    
+    RecordNode *parent = ts->GetNodeFromID(node->GetParentNodeID());
+    NodeID parent_gnid = TouchGNID(ts, parent);
+    
+    NodeID result = HashStrHard(lexical_cast<string>(parent_gnid) + "/" + GetNameFromID(node->GetNameID()));
+    node->SetGNID(result);
+    return result;
+}
+
+GlobalDataStore::GlobalDataStore(int id)
+    :DataStore(id)
+{
+    current_time_number_ = 0;
+    target_name_ = "global";
+    num_records_ = 0;
+    
+}
+
+NodeID GlobalThreadStore::GNIDToSeq(NodeID gnid)
+{
+    if(gnid < 2)
+        return gnid;
+
+    map<NodeID, NodeID>::iterator it = gnid_to_seq_.find(gnid);
+    if(it == gnid_to_seq_.end())
+    {
+        seq_num_++;
+        gnid_to_seq_[gnid] = seq_num_;
+        return seq_num_;
+    }
+    return (*it).second;
+}
+
+void GlobalThreadStore::Integrate()
+{
+
+
+    TimeSliceStore *dest_tss = GetCurrentTimeSlice();
+    bool nowvalue_copied = false;
+    
+    for(map<int, DataStore*>::iterator dsit = gAllDataStore->begin(); dsit != gAllDataStore->end(); dsit++)
+    {
+        DataStore *ds = (*dsit).second;
+        for(DataStore::thread_store_iterator tsit = ds->thread_store_begin(); 
+                    tsit != ds->thread_store_end(); tsit++)
+        {
+            if((*tsit).second == this)
+                continue;
+            TimeSliceStore *src_tss = (*tsit).second->GetCurrentTimeSlice();
+            
+            if(!nowvalue_copied)
+            {
+                nowvalue_copied = true;
+                running_node_ = src_tss->GetRunningNode();
+                now_values_ = src_tss->GetNowValues();
+                dest_tss->SetNowValues(src_tss->GetRunningNode(), src_tss->GetNowValues());
+            }
+            
+            
+            
+            for(TimeSliceStore::map_iterator nit = src_tss->nodes_begin(); nit != src_tss->nodes_end(); nit++)
+            {
+                RecordNodeBasic *src = &(*nit).second;
+                RecordNode *src_current = src_tss->GetThreadStore()->GetNodeFromID(src->GetNodeID());
+                if(!src_current)
+                {
+                    cout << "Error:" << endl;
+                    src_tss->GetThreadStore()->DumpText(cout);
+                    assert(false);
+                }
+                NodeID dest_node_id = GNIDToSeq(src_current->GetGNID());
+                
+                RecordNode *dest_current = dest_tss->GetThreadStore()->GetNodeFromID(dest_node_id);
+                if(!dest_current)
+                {
+                    NodeID dest_parent_id = 0;
+                    RecordNode *src_current_parent = src_tss->GetThreadStore()->GetNodeFromID(src_current->GetParentNodeID());
+                    if(src_current_parent)
+                        dest_parent_id = GNIDToSeq(src_current_parent->GetGNID());
+
+                    dest_current = AddCurrentNode(dest_node_id, dest_parent_id, dest_node_id);
+                    assert(dest_current->GetNodeID() < 1000000);
+                    dest_current->SetGNID(src_current->GetGNID());
+                    this->GetDataStore()->SetNameID(dest_node_id, src_current->GetNameString());
+                }
+                RecordNodeBasic *dest = dest_tss->GetNodeFromID(dest_node_id, true);
+                assert(dest_current->GetNodeID() < 1000000);
+                
+                for(int i = 0; i < ds_->GetNumProfileValues(); i++)
+                {
+                    if(!ds_->GetRecordMetadata(i).StaticValueFlag)
+                    {
+                        dest->GetAllValues()[i] += src->GetAllValues()[i];
+                        dest->GetChildrenValues()[i] += src->GetChildrenValues()[i];
+                        dest_current->GetAllValues()[i] += src->GetAllValues()[i];
+                        dest_current->GetChildrenValues()[i] += src->GetChildrenValues()[i];
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+void GlobalDataStore::Integrate()
+{
+    
+    if(num_records_ == 0)
+    {
+        for(map<int, DataStore*>::iterator dsit = gAllDataStore->begin(); dsit != gAllDataStore->end(); dsit++)
+        {
+            DataStore *ds = (*dsit).second;
+            if(ds == this)
+                continue;
+            
+            if(ds->GetNumProfileValues() != 0)
+            {
+                num_records_ = ds->GetNumProfileValues();
+                record_metadata_ = ds->GetRecordMetadataVector();
+                threads_[0] = new GlobalThreadStore(this);
+                break;
+            }
+            
+        }
+    }
+    if(num_records_ != 0)
+    {
+        current_time_number_++;
+        ((GlobalThreadStore*)threads_[0])->Integrate();
+    }
 }
 
 } // namespace llprof

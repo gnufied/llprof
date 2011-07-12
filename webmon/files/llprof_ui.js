@@ -55,7 +55,7 @@ function count_update_counter()
     g_need_update_counter--;
     if(g_need_update_counter < 0)
     {
-        g_need_update_counter = 5;
+        g_need_update_counter = 10;
         update_ui();
     }
     else
