@@ -812,7 +812,6 @@ void RecordNodeBasic::Accumulate(const RecordNodeBasic &rhs)
 
 TimeSliceStore::TimeSliceStore()
 {
-    cout << "Allocate TimeSliceStore" << endl;
 }
 
 TimeSliceStore::~TimeSliceStore()
@@ -1156,7 +1155,6 @@ void GlobalThreadStore::Integrate()
             }
             if(IsSingleTreeMode())
             {
-                cout << "Removing time slice..." << endl;
                 ts->RemoveTimeSlice();
             }
         }
