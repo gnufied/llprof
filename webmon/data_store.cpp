@@ -609,9 +609,8 @@ void ThreadStore::DumpText(ostream &strm)
     {
         RecordNode &n = (*it).second;
         strm << "  Node:" << n << endl;
-        strm << endl;
     }
-    
+    strm << endl;
     
     for(size_t i = 0; i < time_slice_.size(); i++)
     {
