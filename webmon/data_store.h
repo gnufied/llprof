@@ -540,12 +540,12 @@ public:
 
 class GlobalDataStore: public DataStore
 {
-    bool remove_time_slice_;
+    bool is_single_tree_mode_;
 public:
     GlobalDataStore(int id);
 
     void Integrate();
-    bool IsRemoveTimeSlice(){return remove_time_slice_;}
+    bool IsSingleTreeMode(){return is_single_tree_mode_;}
 };
 
 const int DF_CURRENT_TREE = 1;

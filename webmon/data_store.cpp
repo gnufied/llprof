@@ -21,12 +21,22 @@ int gDataStoreIDSeq;
 pthread_t g_datastore_server_thread;
 GlobalDataStore *gGlobalDataStore;
 
+bool IsSingleTreeMode()
+{
+    if(gGlobalDataStore && gGlobalDataStore->IsSingleTreeMode())
+        return true;
+    return false;
+}
+
 
 void RecordNodeBasic::SetDataStore(DataStore *ds)
 {
     ds_ = ds;
-    all_values_.resize(ds_->GetNumProfileValues());
-    children_values_.resize(ds_->GetNumProfileValues());
+    if(!IsSingleTreeMode())
+    {
+        all_values_.resize(ds_->GetNumProfileValues());
+        children_values_.resize(ds_->GetNumProfileValues());
+    }
     UpdateDataStore();
 }
     
@@ -364,12 +374,17 @@ end_of_loop:
 ThreadStore::ThreadStore(DataStore *ds): ds_(ds)
 {
     running_node_ = 0;
-    RecordNode &node = current_tree_[1];
+    
+    RecordNode *node = current_tree_[1];
     node.SetDataStore(ds_);
     node.SetNodeID(1);
     node.SetParentNodeID(0);
     node.SetNameID(0);
     node.SetGNID(1);
+
+
+    RecordNode *node = AddCurrentNode(1, 0, 0);
+    node->SetGNID(1);
 
 }
 
@@ -745,7 +760,8 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
         {
             if(!ds_->GetRecordMetadata(i).StaticValueFlag)
             {
-                node->GetChildrenValues()[i] += child->GetTempValues()[i];
+                if(!node->GetChildrenValues().empty())
+                    node->GetChildrenValues()[i] += child->GetTempValues()[i];
                 tss_node->GetChildrenValues()[i] += child->GetTempValues()[i];
 
                 if(!ds_->GetRecordMetadata(i).AccumulatedValueFlag)
@@ -762,12 +778,14 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
         assert(tss_node->GetAllValues()[i] == 0);
         if(ds_->GetRecordMetadata(i).StaticValueFlag)
         {
-            node->GetAllValues()[i] = node->GetTempValues()[i];
+            if(!node->GetAllValues().empty())
+                node->GetAllValues()[i] = node->GetTempValues()[i];
             tss_node->GetAllValues()[i] = node->GetAllValues()[i];
         }
         else
         {
-            node->GetAllValues()[i] += node->GetTempValues()[i];
+            if(!node->GetAllValues().empty())
+                node->GetAllValues()[i] += node->GetTempValues()[i];
             tss_node->GetAllValues()[i] += node->GetTempValues()[i];
         }
     }
@@ -799,6 +817,7 @@ void RecordNodeBasic::Accumulate(const RecordNodeBasic &rhs)
 
 TimeSliceStore::TimeSliceStore()
 {
+    cout << "Allocate TimeSliceStore" << endl;
 }
 
 TimeSliceStore::~TimeSliceStore()
@@ -1056,8 +1075,7 @@ GlobalDataStore::GlobalDataStore(int id)
     current_time_number_ = 0;
     target_name_ = "global";
     num_records_ = 0;
-    remove_time_slice_ = true;
-    
+    is_single_tree_mode_ = true;
 }
 
 NodeID GlobalThreadStore::GNIDToSeq(NodeID gnid)
@@ -1141,8 +1159,9 @@ void GlobalThreadStore::Integrate()
                     }
                 }
             }
-            if(((GlobalDataStore*)ds_)->IsRemoveTimeSlice())
+            if(IsSingleTreeMode())
             {
+                cout << "Removing time slice..." << endl;
                 ts->RemoveTimeSlice();
             }
         }
