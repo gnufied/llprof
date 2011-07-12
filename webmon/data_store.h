@@ -171,7 +171,7 @@ public:
     {
         running_ = false;
     }
-    void SetDataStore(DataStore *ds);
+    void SetDataStore(DataStore *ds, bool strippable = false);
     NodeID GetNodeID() const {return id_;}
     void SetNodeID(NodeID id){ id_ = id; }
     
@@ -368,7 +368,7 @@ public:
     const vector<ProfileValue> *GetStartProfileValue(int from, int to);
     void CheckAllTimeSlice();
 
-    RecordNode* AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID name_id);
+    RecordNode* AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID name_id, bool stripable = false);
 
 };
 

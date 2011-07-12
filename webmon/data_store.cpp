@@ -29,10 +29,10 @@ bool IsSingleTreeMode()
 }
 
 
-void RecordNodeBasic::SetDataStore(DataStore *ds)
+void RecordNodeBasic::SetDataStore(DataStore *ds, bool strippable)
 {
     ds_ = ds;
-    if(!IsSingleTreeMode())
+    if(!strippable || !IsSingleTreeMode())
     {
         all_values_.resize(ds_->GetNumProfileValues());
         children_values_.resize(ds_->GetNumProfileValues());
@@ -640,10 +640,10 @@ void ThreadStore::MarkRunningNodes()
     }
 }
 
-RecordNode *ThreadStore::AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID nameid)
+RecordNode *ThreadStore::AddCurrentNode(NodeID cnid, NodeID parent_cnid, NameID nameid, bool stripable)
 {
     RecordNode &node = current_tree_[cnid];
-    node.SetDataStore(ds_);
+    node.SetDataStore(ds_, stripable);
     node.SetNodeID(cnid);
     node.SetParentNodeID(parent_cnid);
     node.SetNameID(nameid);
@@ -687,7 +687,7 @@ void ThreadStore::Store(intrusive_ptr<MessageBuf> buf, intrusive_ptr<MessageBuf>
         map<NodeID, RecordNode>::iterator iter = current_tree_.find(cnid);
         if(iter == current_tree_.end())
         {
-            RecordNode *node = AddCurrentNode(cnid, parent_cnid, nameid);
+            RecordNode *node = AddCurrentNode(cnid, parent_cnid, nameid, true);
             ds_->TouchGNID(this, node);
             if(RecordNode *parent = GetNodeFromID(parent_cnid))
                 parent->AddChildID(cnid);
@@ -770,7 +770,7 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
         {
             if(!node->GetAllValues().empty())
                 node->GetAllValues()[i] = node->GetTempValues()[i];
-            tss_node->GetAllValues()[i] = node->GetAllValues()[i];
+            tss_node->GetAllValues()[i] = node->GetTempValues()[i];
         }
         else
         {
