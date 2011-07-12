@@ -374,18 +374,9 @@ end_of_loop:
 ThreadStore::ThreadStore(DataStore *ds): ds_(ds)
 {
     running_node_ = 0;
-    
-    RecordNode *node = current_tree_[1];
-    node.SetDataStore(ds_);
-    node.SetNodeID(1);
-    node.SetParentNodeID(0);
-    node.SetNameID(0);
-    node.SetGNID(1);
-
 
     RecordNode *node = AddCurrentNode(1, 0, 0);
     node->SetGNID(1);
-
 }
 
 void ThreadStore::UpdateNowValues(NodeID running_node, void *pdata)
