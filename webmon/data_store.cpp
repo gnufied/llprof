@@ -216,6 +216,11 @@ bool DataStore::ReceiveLoop()
         // オフセット値の取得
         {
             res = SendQueryInfoRequest(INFO_DATA_SLIDE);
+            if(!res.get())
+            {
+                recv_ = false;
+                return false;
+            }
             stringstream strm(res->AsString());
             
             while(ws(strm), !strm.eof())
