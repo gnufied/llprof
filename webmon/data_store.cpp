@@ -1159,6 +1159,7 @@ void GlobalDataStore::Integrate()
                 num_records_ = ds->GetNumProfileValues();
                 record_metadata_ = ds->GetRecordMetadataVector();
                 threads_[0] = new GlobalThreadStore(this);
+                threads_[0]->SetThreadID(0);
                 break;
             }
             
