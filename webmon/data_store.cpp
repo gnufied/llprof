@@ -506,9 +506,7 @@ TimeSliceStore *ThreadStore::MergeTimeSlice(map<NodeID, RecordNodeBasic> &integr
             (*pos).second.Accumulate((*it).second);
         }
     } 
-    cout << "Merged: " << nslice << endl;
-    
-   
+
     return last_tss;
 }
 
@@ -590,12 +588,8 @@ void ThreadStore::DumpJSON(stringstream &strm, int flag, int p1, int p2)
                 tmp.str("");
                 ProfileValuesToStream(tmp, *start_values);
                 store.add<stringstream &>("start_values", tmp);
-                cout << " *** Succeed to get start_values" << endl;
             }
-            else
-            {
-                cout << " *** Failure to get start_values" << endl;
-            }
+
             store.add<unsigned int>("running_node", last_tss->GetRunningNode());
         }
     }
@@ -801,6 +795,14 @@ void RecordNodeBasic::Accumulate(const RecordNodeBasic &rhs)
             children_values_[i] += rhs.children_values_[i];
         }
     }
+}
+
+TimeSliceStore::TimeSliceStore()
+{
+}
+
+TimeSliceStore::~TimeSliceStore()
+{
 }
 
 TimeSliceStore *ThreadStore::GetTimeSlice(int ts)
@@ -1054,6 +1056,7 @@ GlobalDataStore::GlobalDataStore(int id)
     current_time_number_ = 0;
     target_name_ = "global";
     num_records_ = 0;
+    remove_time_slice_ = true;
     
 }
 
@@ -1075,7 +1078,6 @@ NodeID GlobalThreadStore::GNIDToSeq(NodeID gnid)
 void GlobalThreadStore::Integrate()
 {
 
-
     TimeSliceStore *dest_tss = GetCurrentTimeSlice();
     bool nowvalue_copied = false;
     
@@ -1085,9 +1087,10 @@ void GlobalThreadStore::Integrate()
         for(DataStore::thread_store_iterator tsit = ds->thread_store_begin(); 
                     tsit != ds->thread_store_end(); tsit++)
         {
-            if((*tsit).second == this)
+            ThreadStore *ts = (*tsit).second;
+            if(ts == this)
                 continue;
-            TimeSliceStore *src_tss = (*tsit).second->GetCurrentTimeSlice();
+            TimeSliceStore *src_tss = ts->GetCurrentTimeSlice();
             
             if(!nowvalue_copied)
             {
@@ -1137,6 +1140,10 @@ void GlobalThreadStore::Integrate()
                         dest_current->GetChildrenValues()[i] += src->GetChildrenValues()[i];
                     }
                 }
+            }
+            if(((GlobalDataStore*)ds_)->IsRemoveTimeSlice())
+            {
+                ts->RemoveTimeSlice();
             }
         }
     }

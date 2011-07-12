@@ -280,6 +280,9 @@ class TimeSliceStore
     NodeID running_node_;
     
 public:
+    TimeSliceStore();
+    ~TimeSliceStore();
+
     ThreadStore *GetThreadStore(){return ts_;}
 
     void SetThreadStore(ThreadStore *ts);
@@ -323,6 +326,10 @@ public:
     ThreadStore(DataStore *ds);
     virtual ~ThreadStore(){}
     
+    void RemoveTimeSlice()
+    {
+       time_slice_.clear();
+    }
     
     RecordNode *GetRootNode();
     
@@ -533,9 +540,12 @@ public:
 
 class GlobalDataStore: public DataStore
 {
+    bool remove_time_slice_;
 public:
     GlobalDataStore(int id);
+
     void Integrate();
+    bool IsRemoveTimeSlice(){return remove_time_slice_;}
 };
 
 const int DF_CURRENT_TREE = 1;

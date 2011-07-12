@@ -382,7 +382,6 @@ void* http_server_main(void *p)
         pthread_create(&client_handler_thread, NULL, start_client_handler, (void *)client_sock);
         pthread_detach(client_handler_thread);
         
-        cout << "# of threads: " << g_thread_counter << endl;
 	}
     return NULL;
 }
