@@ -726,7 +726,7 @@ void ThreadStore::MarkNodeDirty(RecordNode *node)
         node->ClearTempValues();
         // StaticValueはデフォルトで前回と同一値をとる
         for(int i = 0; i < ds_->GetNumProfileValues(); i++)
-            if(ds_->GetRecordMetadata(i).StaticValueFlag)
+            if(ds_->GetRecordMetadata(i).StaticValueFlag && !IsSingleTreeMode())
                 node->GetTempValues()[i] = node->GetAllValues()[i];
         
         MarkNodeDirty(GetNodeFromID(node->GetParentNodeID()));
