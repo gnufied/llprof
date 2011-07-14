@@ -460,7 +460,12 @@ void write_json(stringstream &strm, const RecordNodeBasic &node)
     JsonDict out(strm);
     out.add<unsigned int>("id", node.GetNodeID());
     out.add<unsigned int>("pid", node.GetParentNodeID());
-    out.add<string>("name", node.GetDataStore()->GetNameFromID(node.GetNameID()));
+
+    string name = node.GetDataStore()->GetNameFromID(node.GetNameID());
+    for(string::iterator it = name.begin(); it != name.end(); it++)
+        if(!isprint(*it))
+            *it = 'X';
+    out.add<string>("name", name);
     
     stringstream s;
     ProfileValuesToStream(s, node.GetAllValues());
@@ -812,6 +817,7 @@ void RecordNodeBasic::Accumulate(const RecordNodeBasic &rhs)
 
 TimeSliceStore::TimeSliceStore()
 {
+    running_node_ = 0;
 }
 
 TimeSliceStore::~TimeSliceStore()
@@ -850,9 +856,15 @@ void InitDataStore()
     gAllDataStore = new map<int, DataStore*>();
     gDataStoreIDSeq = 0;
 
-    gGlobalDataStore = new GlobalDataStore(gDataStoreIDSeq);
-    (*gAllDataStore)[gDataStoreIDSeq] = gGlobalDataStore;
-
+    if(getenv("WEBMON_SINGLE") && string(getenv("WEBMON_SINGLE")) != "0")
+    {
+        gGlobalDataStore = new GlobalDataStore(gDataStoreIDSeq);
+        (*gAllDataStore)[gDataStoreIDSeq] = gGlobalDataStore;
+    }
+    else
+    {
+        gGlobalDataStore = NULL;
+    }
 
     pthread_create(&g_datastore_server_thread, NULL, DataStoreAcceptThreadMain, NULL);
     pthread_detach(g_datastore_server_thread);

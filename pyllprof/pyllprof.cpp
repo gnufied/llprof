@@ -27,7 +27,7 @@ static PyObject * minit(PyObject *self, PyObject *args)
 }
 
 
-static PyObject * pyllprof_begin_profile(PyObject *self, PyObject *args)
+void pyllprof_c_begin_profile(char *s)
 {
     int *counter = (int *)pthread_getspecific(g_thread_flag_key);
     if(!counter)
@@ -38,15 +38,19 @@ static PyObject * pyllprof_begin_profile(PyObject *self, PyObject *args)
     }
     (*counter)++;
     
-    
+    llprof_call_handler(HashStr(s), s);
+
+}
+
+
+static PyObject * pyllprof_begin_profile(PyObject *self, PyObject *args)
+{
     int ok;
     char *s;
     ok = PyArg_ParseTuple(args, "s", &s);
-    llprof_call_handler(HashStr(s), s);
-
+    pyllprof_c_begin_profile(s);
     Py_RETURN_NONE;
 }
-
 
 
 static PyObject * pyllprof_end_profile(PyObject *self, PyObject *args)
@@ -165,6 +169,11 @@ initpyllprof(void)
     llprof_init();
     pyllprof_init();
     
+    char *startup_val = getenv("LLPROF_STARTUP");
+    if(startup_val && string(startup_val) != "0")
+    {
+        pyllprof_c_begin_profile("Root");
+    }
     
 #if PY_MAJOR_VERSION >= 3
     return module;

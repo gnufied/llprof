@@ -156,18 +156,28 @@ function accumurate(dest, src, thread)
     }
 }
 
+function dprint(s)
+{
+    $('#debug2').append(s + "<br />");
+}
+
 function set_running_node(thread, flag)
 {
     if(!("running_node" in thread))
         return;
     
     var id = thread.running_node;
-    
+    var arr = [];
     while(id in thread.nodes)
     {
         var node = thread.nodes[id];
         node.running = flag;
         id = node.pid;
+    }
+    
+    for(var i = arr.length; i>= 0; i--)
+    {
+        dprint(arr[i]);
     }
     return;
 }
@@ -191,6 +201,7 @@ function update_ui_cct(data)
     var updateStart = new Date();
     var update_threads = {};
     
+    
     if(g_timenav.real_time)
     {
         g_timenav.max_time = data.timenum;
@@ -206,6 +217,7 @@ function update_ui_cct(data)
         g_metadata[i] = data.metadata[i];
     }
     
+
     var timecaption_updated = false;
     for(var i = 0; i < data.threads.length; i++)
     {
@@ -221,9 +233,12 @@ function update_ui_cct(data)
         set_running_node(g_target_cct[thread.id], false);
 
 
-        g_target_cct[thread.id].now_values = thread.now_values;
-        g_target_cct[thread.id].start_values = thread.start_values;
-        g_target_cct[thread.id].running_node = thread.running_node;
+        if(thread.now_values && thread.now_values.length != 0)
+            g_target_cct[thread.id].now_values = thread.now_values;
+        if(thread.start_values && thread.start_values.length != 0)
+            g_target_cct[thread.id].start_values = thread.start_values;
+        if( thread.running_node != 0)
+            g_target_cct[thread.id].running_node = thread.running_node;
 
         if(!timecaption_updated)
         {
@@ -270,7 +285,6 @@ function update_ui_cct(data)
         };
     }
     var updateStartUpdatePanel = new Date();
-
     if(g_timenav.real_time)
     {
         update_main_panel(update_threads);
@@ -282,7 +296,7 @@ function update_ui_cct(data)
     }
     var updateEnd = new Date();
     document.title =
-        "Merge: " + (updateStartUpdatePanel - updateStart) + "ms "
+        "Merge Time: " + (updateStartUpdatePanel - updateStart) + "ms "
         + " Pane:" + (updateEnd - updateStartUpdatePanel)
         + " nDiv:" + ($('div').length)
     ;
@@ -358,6 +372,7 @@ Panels.cct = {
     tree_reload: function()
     {
         $("#mainpanel").html("<div id='cct_outer'><div id='cct_inner'></div></div>");
+        this.cct_dict = {};
         for(var thread_id in g_target_cct)
         {
             var thread_elem = Panels.cct.get_thread_elem(thread_id);
@@ -388,21 +403,29 @@ Panels.cct = {
     get_node_elem: function(thread_id, node_id, auto_add, parent_node_id)
     {
         var node_elem_id = "node_th_" + thread_id + "_" + node_id;
-        var node_elem = $("#" + node_elem_id);
-        if(node_elem.length != 0)
-            return node_elem;
+        
+        if(node_elem_id in this.cct_dict)
+        {
+            return $("#" + node_elem_id);
+        }
         if(auto_add)
         {
             var parent_elem;
             if(parent_node_id == THREAD_NODE_ID)
+            {
                 parent_elem = Panels.cct.get_thread_elem(thread_id);
+                if(parent_elem.children(".children").length == 0)
+                    return null;
+            }
             else
-                parent_elem = $("#node_th_" + thread_id + "_" + parent_node_id);
-            
-            if(parent_elem.children(".children").length == 0)
-                return null;
-            
-            Panels.cct.add_node(parent_elem, thread_id, node_id);
+            {
+                var pnode_elem_id = "#node_th_" + thread_id + "_" + parent_node_id;
+                if(!(pnode_elem_id in this.cct_dict) || this.cct_dict[pnode_elem_id] != 2)
+                    return null;
+                
+                parent_elem = $(pnode_elem_id);
+            }
+            node_elem = Panels.cct.add_node(parent_elem, thread_id, node_id);
             return node_elem;
         }
         else
@@ -460,7 +483,8 @@ Panels.cct = {
     add_node: function(parent_elem, thread_id, node_id){
         var node_elem_id = "node_th_" + thread_id + "_" + node_id;
         parent_elem.children(".children").append("<div class='treenode' id='" + node_elem_id + "'><div class='nodelabel'></div></div>");
-        node_elem = $("#" + node_elem_id);
+        this.cct_dict[node_elem_id] = 1;
+        var node_elem = $("#" + node_elem_id);
         node_elem.attr("nodeid", node_id);
         node_elem.attr("threadid", thread_id);
         Panels.cct.update_label(node_elem);
@@ -484,12 +508,23 @@ Panels.cct = {
         return node_elem;
     },
     
+    ids_to_elemid: function(thread_id, node_id)
+    {
+        return "node_th_" + thread_id + "_" + node_id;
+    },
+
+    elem_to_node_elemid: function(node)
+    {
+        return this.ids_to_elemid(node.attr("threadid"), node.attr("nodeid"));
+    },
+    
     open_node_elem: function(elem)
     {
         if(elem.children(".children").length != 0)
         {
             delete this.open_nodes[elem.attr("nodeid")];
             elem.children(".children").remove();
+            this.cct_dict[this.elem_to_node_elemid(elem)] = 1;
             return;
         }
         elem.append("<div class='children'></div>");
@@ -498,6 +533,8 @@ Panels.cct = {
         var thread_id = this.last_opened.threadid;
         var node = g_target_cct[thread_id].nodes[this.last_opened.nodeid];
         this.open_nodes[this.last_opened.nodeid] = node;
+        this.cct_dict[this.ids_to_elemid(thread_id, this.last_opened.nodeid)] = 2;
+        
         for(var id in node.cid)
         {
             var node_elem = Panels.cct.add_node(elem, thread_id, id);
