@@ -51,6 +51,8 @@ void llprof_return_handler();
 
 void llprof_calltree_init();
 
+profile_value_t* llprof_get_profile_value_ptr();
+
 std::string llprof_get_record_info();
 
 

@@ -371,6 +371,14 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
 	ti->stop = 0;
 }
 
+profile_value_t* llprof_get_profile_value_ptr()
+{
+    ThreadInfo* ti = CURRENT_THREAD;
+    get_current_node_info_pair(ti, ninfo, sinfo);
+
+    return sinfo->profile_value;
+}
+
 
 void llprof_return_handler()
 {
