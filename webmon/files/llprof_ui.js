@@ -816,6 +816,7 @@ Panels.square = {
         if(data.depth >= data.max_depth)
             return;
 
+        var current_node_pv = get_profile_value_all(data.thread, data.node, g_target_pv_index);
         data.target_elem.append("<div class='sqv_sq' id='node_" + data.node.id + "'> </div>");
         $('#node_' + data.node.id)
             .css("left", data.x)
@@ -824,7 +825,7 @@ Panels.square = {
             .css("background-color", g_colors[data.color % g_colors.length])
             .width(data.w)
             .height(data.h)
-            .html(data.node.name + " (" + data.node.id + ")")
+            .html(data.node.name + " (ID:" + data.node.id + " PV:" + current_node_pv + ")")
         ;
 
         var allval = 0.0;
@@ -835,8 +836,8 @@ Panels.square = {
             values[cnode.id] = get_profile_value_all(data.thread, cnode, g_target_pv_index);
             allval += values[cnode.id];
         }
-        if(get_profile_value_all(data.thread, data.node, g_target_pv_index) > allval)
-            allval = get_profile_value_all(data.thread, data.node, g_target_pv_index);
+        if(current_node_pv > allval)
+            allval = current_node_pv;
 
         var psum = 0.0;
         var cur_color = data.color + 1;
