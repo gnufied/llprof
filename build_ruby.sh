@@ -6,7 +6,7 @@ cd rrprofext
 
 ruby extconf.rb
 make
-sudo make install
+make install
 
 
 

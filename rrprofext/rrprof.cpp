@@ -1,6 +1,5 @@
 
 #include <ruby/ruby.h>
-// #include <vm_core.h>
 #include <assert.h>
 #include <time.h>
 #include <errno.h>
@@ -9,10 +8,6 @@
 #include <iostream>
 #include <sstream>
 using namespace std;
-
-
-void rrprof_exit (void);
-
 
 struct ruby_name_info_t{
     VALUE klass;
@@ -25,9 +20,8 @@ const char *rrprof_name_func(nameid_t nameid, void *name_info_ptr)
         return "(null)";
 
     stringstream s;
-    s << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass);
-    s << "::";
-    s << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
+    s   << rb_class2name(((ruby_name_info_t*)name_info_ptr)->klass)
+        << "::" << rb_id2name(((ruby_name_info_t*)name_info_ptr)->id);
     return s.str().c_str();
 }
 
@@ -50,50 +44,21 @@ void rrprof_calltree_call_hook(rb_event_flag_t event, VALUE data, VALUE self, ID
     llprof_call_handler(nameid, (void *)&ruby_name_info);
 }
 
-
-
-
 void rrprof_calltree_ret_hook(rb_event_flag_t event, VALUE data, VALUE self, ID p_id, VALUE p_klass)
 {
     llprof_return_handler();
 }
 
-
-
-
-extern "C"
+extern "C" 
 void Init_rrprof(void)
 {
-
-
     llprof_set_time_func(get_time_now_nsec);
     llprof_set_name_func(rrprof_name_func);
     llprof_init();
-    
-
     
 	VALUE rrprof_mod = rb_define_module("RRProf");
 
 	rb_add_event_hook(&rrprof_calltree_call_hook, RUBY_EVENT_CALL | RUBY_EVENT_C_CALL, Qnil);
 	rb_add_event_hook(&rrprof_calltree_ret_hook, RUBY_EVENT_RETURN | RUBY_EVENT_C_RETURN, Qnil);
-
-
-
-    atexit (rrprof_exit);
-
 }
-
-
-
-void rrprof_exit (void)
-{
-
-    char *ep_mode = getenv("RRPROF_ENDPRINT");
-    if(ep_mode && !strcmp(ep_mode, "1"))
-    {
-        printf("[rrprof exit]\n");
-    }
-}
-
-
 

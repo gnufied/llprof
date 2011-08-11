@@ -18,6 +18,7 @@ void ph(string s)
 
 int main()
 {
+    /*
     ph("visit_Attribute");
     ph("_clone");
     ph("c");
@@ -26,6 +27,7 @@ int main()
     ph("init");
     ph("tini");
     ph("gg");
+    */
     InitSocketSubSystem();
     
     InitDataStore();

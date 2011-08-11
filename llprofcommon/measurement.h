@@ -3,14 +3,14 @@
 
 #include <string>
 #include <vector>
-#include "call_tree.h"
+// #include "call_tree.h"
 
-typedef unsigned long long profile_value_t;
+typedef signed long long profile_value_t;
 
-time_val_t get_time_now_nsec();
+profile_value_t get_time_now_nsec();
 
 void start_timer_thread();
-time_val_t get_timer_thread_counter();
+profile_value_t get_timer_thread_counter();
 
 
 class rtype_metainfo_t

@@ -6,10 +6,10 @@
 #define CALL_TREE_H
 
 #include "llprof_const.h"
+#include "measurement.h"
 #include <string>
 
 
-typedef long long int time_val_t;
 
 
 typedef struct
@@ -39,7 +39,7 @@ typedef unsigned long long nameid_t;
 
 // Public API
 void llprof_set_name_func(const char * cb(nameid_t, void *data_ptr));
-void llprof_set_time_func(time_val_t (*cb)());
+void llprof_set_time_func(profile_value_t (*cb)());
 
 
 

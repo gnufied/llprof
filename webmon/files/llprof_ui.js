@@ -5,7 +5,7 @@ g_default_panel = "cct";
 g_target_cct = null;
 g_now_info = {};
 g_metadata = {};
-
+g_target_pv_index = 2;
 
 var THREAD_NODE_ID = 0;
 var ROOT_NODE_ID = 1;
@@ -55,7 +55,7 @@ function count_update_counter()
     g_need_update_counter--;
     if(g_need_update_counter < 0)
     {
-        g_need_update_counter = 10;
+        g_need_update_counter = 5;
         update_ui();
     }
     else
@@ -175,10 +175,6 @@ function set_running_node(thread, flag)
         id = node.pid;
     }
     
-    for(var i = arr.length; i>= 0; i--)
-    {
-        dprint(arr[i]);
-    }
     return;
 }
 
@@ -344,7 +340,7 @@ function get_profile_value_all(thread, node, index)
         val += (thread.now_values[1] - node_start_time);
     }
     
-    if(!g_timenav.real_time && thread.start_values &&  val > (thread.now_values[1] - thread.start_values[1]))
+    if(!g_timenav.real_time && thread.start_values && thread.now_values && val > (thread.now_values[1] - thread.start_values[1]))
          val = thread.now_values[1] - thread.start_values[1];
     return val;
 }
@@ -448,10 +444,15 @@ Panels.cct = {
         var thread = g_target_cct[node_elem.attr('threadid')];
         var node = thread.nodes[node_elem.attr('nodeid')];
         
-        var sval = get_profile_value_all(thread, node, 0) / (1000 * 1000 * 1000);
+        // todo: adhoc
+        var sval;
+        if(g_target_pv_index == 0)
+            sval = get_profile_value_all(thread, node, 0) / (1000 * 1000 * 1000);
+        else
+            sval = get_profile_value_all(thread, node, g_target_pv_index);
         node_elem.children(".nodelabel").html(
             "<img src='/files/"+(node.running?"running":"normal")+".png' />"
-             + node.id + ":" + html_esc(node.name) + " " + sval + "s");
+             + node.id + ":" + html_esc(node.name) + " " + sval);
         
         // node_elem.children(".nodelabel").html("Node:" + html_esc(node.name) + " v: " + node.all + ";  " + node.cld);
     },
@@ -553,11 +554,12 @@ Panels.list = {
     init: function()
     {
         this.namecol = {
-            width: 200
+            width: 400
         };
+        
         this.col = [
-            {idx: 0, mode: "all", width: 140},
-            {idx: 0, mode: "self", width: 140}
+            {idx: g_target_pv_index, mode: "all", width: 140},
+            {idx: g_target_pv_index, mode: "self", width: 140}
         ];
         $("#mainpanel").html("<table id='mtbl_header'></table><div id='mtbl_scroll'><table id='mtbl'></table></div>");
         $('#mtbl_scroll').css('overflow', 'scroll');
@@ -679,7 +681,7 @@ Panels.list = {
     {
         this.merge_orderd();
 
-        for(var i = 0; i < this.ordered.length && i < 50; i++)
+        for(var i = 0; i < this.ordered.length && i < 100; i++)
         {
             var node_stock = this.ordered[i];
             var html = "<td>" + node_stock.name + "</td>";
@@ -694,7 +696,12 @@ Panels.list = {
                 if(col.mode == "all")
                     html += node_stock.all[col.idx];
                 else if(col.mode == "self")
-                    html += (node_stock.all[col.idx] - node_stock.cld[col.idx]);
+                {
+                    var v = (node_stock.all[col.idx] - node_stock.cld[col.idx]);
+                    if(v < 0)
+                        v = -1;
+                    html += v;
+                }
                 html += "</td>";
             }
             $('#tbl_' + i).html(html);
@@ -825,11 +832,11 @@ Panels.square = {
         for(var key in data.node.cid)
         {
             var cnode = data.node.cid[key];
-            values[cnode.id] = get_profile_value_all(data.thread, cnode, 0);
+            values[cnode.id] = get_profile_value_all(data.thread, cnode, g_target_pv_index);
             allval += values[cnode.id];
         }
-        if(get_profile_value_all(data.thread, data.node, 0) > allval)
-            allval = get_profile_value_all(data.thread, data.node, 0);
+        if(get_profile_value_all(data.thread, data.node, g_target_pv_index) > allval)
+            allval = get_profile_value_all(data.thread, data.node, g_target_pv_index);
 
         var psum = 0.0;
         var cur_color = data.color + 1;
@@ -929,7 +936,7 @@ function do_command(cmd)
             nodes: cmd[4].split(','),
             //depth: parseInt(cmd[5]),
             cb: function(req){
-                var html = "<table id='charting_table'><tr><td></td>";
+                var html = "<div style='padding-left: 80px;'><table id='charting_table'><tr><td></td>";
                 
                 var nkeys = req.keys_idx.length;
                 if(nkeys >= 10)
@@ -951,18 +958,18 @@ function do_command(cmd)
                     {
                         var key = req.keys_idx[j].id;
                         if(req.data[i][key])
-                            html += "<td>" + get_profile_value_all(req.thread_data[i], req.data[i][key], 0) + "</td>";
+                            html += "<td>" + get_profile_value_all(req.thread_data[i], req.data[i][key], g_target_pv_index) + "</td>";
                         else
                             html += "<td>0</td>";
                     }
                     html += "</tr>";
                 }
-                html += "</table>";
+                html += "</table></div>";
                 $('#mainpanel').html(html);
                 $("#charting_table").visualize({
                     type: "line",
-                    width: 700,
-                    height: 500,
+                    width: 900,
+                    height: 400,
                     parseDirection: "y",
                     colors: [
                         '#be1e2d','#666699','#92d5ea','#ee8310','#8d10ee','#5a3b16','#26a4ed','#f45a90','#e9e744',
@@ -973,6 +980,10 @@ function do_command(cmd)
                 $("#charting_table").hide();
             },
         });
+    }
+    else if(cmd[0] == "v" && cmd.length >= 2)
+    {
+        g_target_pv_index = parseInt(cmd[1]);
     }
 }
 

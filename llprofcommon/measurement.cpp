@@ -5,16 +5,16 @@
 
 
 #ifndef _WIN32
-time_val_t get_time_now_nsec()
+profile_value_t get_time_now_nsec()
 {
 	struct timespec tp;
 	//clock_gettime(CLOCK_MONOTONIC, &tp);
 	clock_gettime(CLOCK_REALTIME, &tp);
     
-	return ((time_val_t)tp.tv_sec)*1000*1000*1000 + ((time_val_t)tp.tv_nsec);
+	return ((profile_value_t)tp.tv_sec)*1000*1000*1000 + ((profile_value_t)tp.tv_nsec);
 }
 #else
-time_val_t get_time_now_nsec()
+profile_value_t get_time_now_nsec()
 {
     FILETIME ft;
     ULARGE_INTEGER u64Time;
@@ -26,8 +26,8 @@ time_val_t get_time_now_nsec()
 
 #endif
 
-volatile time_val_t gTimerCounter = 0;
-time_val_t gTimerCounterInterval = 1000;
+volatile profile_value_t gTimerCounter = 0;
+profile_value_t gTimerCounterInterval = 1000;
 pthread_t gTimerThread;
 
 static void* timer_thread_main(void *p)
@@ -44,7 +44,7 @@ void start_timer_thread()
     pthread_detach(gTimerThread);
 }
 
-time_val_t get_timer_thread_counter()
+profile_value_t get_timer_thread_counter()
 {
     return gTimerCounter;
 }

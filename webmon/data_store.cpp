@@ -105,7 +105,7 @@ void* DataStore_ReceiveThread(void *data)
     while(true)
     {
         sleep(interval);
-        time_val_t start_tv = get_time_now_nsec();
+        profile_value_t start_tv = get_time_now_nsec();
         for(map<int,DataStore*>::iterator iter = gAllDataStore->begin(); iter != gAllDataStore->end(); iter++)
         {
             (*iter).second->ReceiveLoop();
@@ -114,7 +114,7 @@ void* DataStore_ReceiveThread(void *data)
         if(gGlobalDataStore)
             gGlobalDataStore->Integrate();
         
-        cout << "Fetch Time: " << (double(get_time_now_nsec() - start_tv) / 1000.0 / 1000.0 / 1000.0 ) << endl;
+        /// cout << "Fetch Time: " << (double(get_time_now_nsec() - start_tv) / 1000.0 / 1000.0 / 1000.0 ) << endl;
     }
     return NULL;
 }
@@ -743,10 +743,10 @@ void ThreadStore::MarkNodeDirty(RecordNode *node)
     }
 }
 
-void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
+bool ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
 {
     if(!node || !node->IsDirty())
-        return;
+        return false;
 
     RecordNodeBasic *tss_node = tss->GetNodeFromID(node->GetNodeID());
     assert(tss_node);
@@ -754,7 +754,8 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
     for(RecordNode::children_iterator it = node->children_begin(); it != node->children_end(); it++)
     {
         RecordNode *child = GetNodeFromID(*it);
-        ClearDirtyNode(child, tss);
+        if(!ClearDirtyNode(child, tss))
+            continue;
         
         for(int i = 0; i < ds_->GetNumProfileValues(); i++)
         {
@@ -790,6 +791,7 @@ void ThreadStore::ClearDirtyNode(RecordNode *node, TimeSliceStore *tss)
         }
     }
     node->SetDirty(false);
+    return true;
 }
 
 RecordNode *ThreadStore::GetRootNode()

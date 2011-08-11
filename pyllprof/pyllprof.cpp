@@ -64,6 +64,19 @@ static PyObject * pyllprof_end_profile(PyObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
+static PyObject * pyllprof_icl(PyObject *self, PyObject *args)
+{
+    profile_value_t *pval = llprof_get_profile_value_ptr();
+
+    int ok;
+    int idx;
+    int val;
+    ok = PyArg_ParseTuple(args, "ii", &idx, &val);
+
+    pval[idx] += val;
+    
+    Py_RETURN_NONE;
+}
 
 
 int pyllprof_tracefunc(PyObject *obj, PyFrameObject *frame, int what, PyObject *arg)
@@ -133,6 +146,7 @@ static PyMethodDef pyllprof_methods[] = {
     {"__init__", minit, METH_VARARGS, "Initialize"},
     {"begin_profile", pyllprof_begin_profile, METH_VARARGS, "Begin profile"},
     {"end_profile", pyllprof_end_profile, METH_VARARGS, "End profile"},
+    {"icl", pyllprof_icl, METH_VARARGS, "Increment Value"},
     {NULL, NULL}
 };
 

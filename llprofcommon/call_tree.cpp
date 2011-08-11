@@ -48,8 +48,8 @@ const char *llprof_call_name_func(nameid_t id, void *p)
 }
 
 
-static time_val_t (*g_gettime_func)();
-void llprof_set_time_func(time_val_t (*cb)())
+static profile_value_t (*g_gettime_func)();
+void llprof_set_time_func(profile_value_t (*cb)())
 {
     g_gettime_func = cb;
 }
@@ -374,6 +374,8 @@ void llprof_call_handler(nameid_t nameid, void *name_info)
 profile_value_t* llprof_get_profile_value_ptr()
 {
     ThreadInfo* ti = CURRENT_THREAD;
+    MethodNodeSerializedInfo *sinfo;
+    MethodNodeInfo *ninfo;
     get_current_node_info_pair(ti, ninfo, sinfo);
 
     return sinfo->profile_value;
